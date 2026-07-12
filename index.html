@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>רהיט בבית · הדמיית ריהוט בחדר שלכם</title>
+
+  <!-- Open Graph / WhatsApp preview -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="רהיט בבית — ראו איך הרהיט נראה אצלכם בבית" />
+  <meta property="og:description" content="צלמו רהיט, צלמו את החדר — והאתר יראה לכם איך זה נראה במקום שבחרתם, לפני שקונים." />
+  <meta property="og:locale" content="he_IL" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Secular+One&family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --bg:      #f6f1ea;
+      --surface: #ffffff;
+      --ink:     #221f1a;
+      --muted:   #8b8578;
+      --line:    #e7e0d5;
+      --clay:    #c2703d;
+      --clay-dk: #a95c2d;
+      --clay-sf: #f4e5d8;
+      --sage:    #6f7a5a;
+      --shadow:  0 6px 28px rgba(60,45,30,0.10);
+      --shadow-lg: 0 14px 44px rgba(60,45,30,0.16);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Rubik', sans-serif;
+      min-height: 100svh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap { max-width: 720px; margin: 0 auto; padding: 0 1rem 4rem; }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      padding: 1.8rem 1rem 0.6rem;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      font-family: 'Secular One', sans-serif;
+      font-size: 1.5rem; letter-spacing: 0.02em;
+    }
+    .brand svg { width: 30px; height: 30px; stroke: var(--clay); fill: none; }
+    .brand em { font-style: normal; color: var(--clay); }
+    .tagline {
+      margin-top: 0.5rem; font-size: 0.9rem; font-weight: 400;
+      color: var(--muted); line-height: 1.55; max-width: 30ch; margin-inline: auto;
+    }
+
+    /* ── Stepper ── */
+    .stepper {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0.35rem; margin: 1.3rem auto 0.4rem; max-width: 420px;
+    }
+    .step-dot {
+      display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+      flex: 0 0 auto; width: 92px;
+    }
+    .step-dot .num {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem;
+      background: var(--surface); color: var(--muted);
+      border: 1.5px solid var(--line); transition: all 0.25s;
+    }
+    .step-dot .lbl { font-size: 0.68rem; color: var(--muted); font-weight: 500; }
+    .step-dot.active .num { background: var(--clay); color: #fff; border-color: var(--clay); box-shadow: 0 4px 14px rgba(194,112,61,0.35); }
+    .step-dot.active .lbl { color: var(--ink); font-weight: 600; }
+    .step-dot.done .num { background: var(--sage); color: #fff; border-color: var(--sage); }
+    .step-bar { flex: 1; height: 2px; background: var(--line); border-radius: 2px; max-width: 34px; }
+
+    /* ── Panels ── */
+    .panel { display: none; animation: rise 0.4s ease both; }
+    .panel.active { display: block; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px);} to { opacity: 1; transform: translateY(0);} }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: 18px; box-shadow: var(--shadow);
+      padding: 1.2rem; margin-top: 1rem;
+    }
+    .card h2 {
+      font-family: 'Secular One', sans-serif; font-size: 1.15rem;
+      display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;
+    }
+    .card h2 .badge {
+      background: var(--clay-sf); color: var(--clay-dk);
+      font-family: 'Rubik'; font-weight: 700; font-size: 0.72rem;
+      padding: 0.15rem 0.55rem; border-radius: 999px;
+    }
+    .card .hint { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.9rem; }
+
+    /* ── Upload / dropzone ── */
+    .drop {
+      border: 2px dashed var(--line); border-radius: 14px;
+      background: #fbf8f3;
+      padding: 2.1rem 1rem; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .drop:active, .drop.over { border-color: var(--clay); background: var(--clay-sf); }
+    .drop .ico {
+      width: 54px; height: 54px; margin: 0 auto 0.7rem;
+      border-radius: 50%; background: var(--clay-sf);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .drop .ico svg { width: 26px; height: 26px; stroke: var(--clay); fill: none; }
+    .drop .big { font-weight: 600; font-size: 1rem; }
+    .drop .small { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      font-family: 'Rubik'; font-weight: 600; font-size: 0.95rem;
+      border: none; border-radius: 12px; padding: 0.85rem 1.3rem;
+      cursor: pointer; text-decoration: none; transition: transform 0.12s, box-shadow 0.2s, background 0.2s;
+      width: 100%;
+    }
+    .btn svg { width: 19px; height: 19px; flex-shrink: 0; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--clay); color: #fff; box-shadow: 0 6px 20px rgba(194,112,61,0.32); }
+    .btn-primary:disabled { background: #d9cbbc; color: #fff; box-shadow: none; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+    .btn-ghost:active { background: #f1ebe2; }
+    .btn-sage { background: var(--sage); color: #fff; box-shadow: 0 6px 20px rgba(111,122,90,0.3); }
+    .btn-row { display: flex; gap: 0.6rem; margin-top: 1rem; }
+    .btn-row .btn { width: auto; flex: 1; }
+
+    /* ── Cutout preview (transparency checker) ── */
+    .checker {
+      background-color: #eee;
+      background-image:
+        linear-gradient(45deg, #dcd6cc 25%, transparent 25%),
+        linear-gradient(-45deg, #dcd6cc 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #dcd6cc 75%),
+        linear-gradient(-45deg, transparent 75%, #dcd6cc 75%);
+      background-size: 18px 18px;
+      background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    }
+    .cutout-stage {
+      position: relative; border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: center;
+      min-height: 240px; max-height: 46vh;
+    }
+    .cutout-stage canvas { max-width: 100%; max-height: 46vh; display: block; touch-action: none; }
+    .busy {
+      position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.55); backdrop-filter: blur(2px);
+      font-weight: 600; color: var(--clay-dk); font-size: 0.9rem; z-index: 5;
+    }
+    .busy.on { display: flex; }
+    .spinner {
+      width: 20px; height: 20px; border: 3px solid var(--clay-sf);
+      border-top-color: var(--clay); border-radius: 50%; margin-inline-end: 0.5rem;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Controls ── */
+    .ctrl { margin-top: 0.95rem; }
+    .ctrl-label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.82rem; font-weight: 500; margin-bottom: 0.4rem;
+    }
+    .ctrl-label .val { color: var(--clay-dk); font-variant-numeric: tabular-nums; font-weight: 600; }
+    input[type=range] {
+      -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
+      background: var(--line); border-radius: 999px; outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 24px; height: 24px;
+      border-radius: 50%; background: var(--clay); cursor: pointer;
+      border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%; background: var(--clay);
+      cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+
+    .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-size: 0.82rem; font-weight: 500; color: var(--ink);
+      background: var(--surface); border: 1.5px solid var(--line);
+      border-radius: 999px; padding: 0.5rem 0.85rem; cursor: pointer;
+      transition: all 0.18s;
+    }
+    .chip svg { width: 16px; height: 16px; stroke: currentColor; fill: none; }
+    .chip:active { transform: scale(0.96); }
+    .chip.on { background: var(--clay-sf); border-color: var(--clay); color: var(--clay-dk); }
+
+    /* ── Compose stage ── */
+    .compose-stage {
+      position: relative; width: 100%; margin: 0 auto;
+      border-radius: 14px; overflow: hidden; background: #d8d2c8;
+      box-shadow: var(--shadow-lg); touch-action: none; user-select: none;
+      max-height: 62vh;
+    }
+    .compose-stage .room-img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: fill; pointer-events: none;
+    }
+    #furnitureLayer {
+      position: absolute; left: 50%; top: 55%;
+      transform: translate(-50%,-50%);
+      cursor: grab; will-change: transform, left, top;
+      pointer-events: auto;
+    }
+    #furnitureLayer:active { cursor: grabbing; }
+    #furnitureLayer img { display: block; width: 100%; height: auto; pointer-events: none; }
+    #furnitureLayer.selected::after {
+      content: ''; position: absolute; inset: -2px;
+      border: 2px dashed rgba(194,112,61,0.9); border-radius: 6px;
+      pointer-events: none;
+    }
+    .stage-hint {
+      position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(34,31,26,0.72); color: #fff; font-size: 0.74rem; font-weight: 500;
+      padding: 0.4rem 0.85rem; border-radius: 999px; pointer-events: none;
+      display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+      transition: opacity 0.4s; z-index: 6;
+    }
+
+    /* ── Result ── */
+    .result-img {
+      width: 100%; border-radius: 14px; box-shadow: var(--shadow-lg);
+      border: 1px solid var(--line); display: block;
+    }
+
+    .thumb {
+      width: 100%; border-radius: 12px; border: 1px solid var(--line);
+      display: block; max-height: 44vh; object-fit: contain; background: #fbf8f3;
+    }
+
+    footer {
+      text-align: center; padding: 2rem 1rem 1rem; color: var(--muted);
+      font-size: 0.72rem; letter-spacing: 0.03em;
+    }
+    footer a { color: var(--clay-dk); text-decoration: none; }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--ink); color: #fff; padding: 0.75rem 1.2rem; border-radius: 12px;
+      font-size: 0.86rem; font-weight: 500; box-shadow: var(--shadow-lg);
+      opacity: 0; pointer-events: none; transition: opacity 0.3s, transform 0.3s; z-index: 50;
+      max-width: 90vw; text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10.5V17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6.5"/>
+      <path d="M4 11h16"/><path d="M6 11V8.5A2.5 2.5 0 0 1 8.5 6h7A2.5 2.5 0 0 1 18 8.5V11"/>
+      <path d="M6 19v1.5M18 19v1.5"/>
+    </svg>
+    <span>רהיט <em>בבית</em></span>
+  </div>
+  <p class="tagline">צלמו את הרהיט, צלמו את החדר — וראו איך זה נראה אצלכם בבית, עוד לפני שקניתם.</p>
+
+  <div class="stepper" id="stepper">
+    <div class="step-dot" data-step="1"><div class="num">1</div><div class="lbl">הרהיט</div></div>
+    <div class="step-bar"></div>
+    <div class="step-dot" data-step="2"><div class="num">2</div><div class="lbl">החדר</div></div>
+    <div class="step-bar"></div>
+    <div class="step-dot" data-step="3"><div class="num">3</div><div class="lbl">התוצאה</div></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ══ STEP 1: FURNITURE ══ -->
+  <section class="panel active" id="panel1">
+    <div class="card">
+      <h2>הרהיט שאתם רוצים <span class="badge">שלב 1</span></h2>
+      <p class="hint">צלמו או העלו תמונה של הפריט (ארון, ספה, שולחן...). לתוצאה הכי טובה — צלמו על רקע נקי ואחיד ככל האפשר.</p>
+
+      <div class="drop" id="dropItem">
+        <div class="ico">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+            <circle cx="12" cy="13" r="3.5"/>
+          </svg>
+        </div>
+        <div class="big">צלמו או העלו את הרהיט</div>
+        <div class="small">לחצו כאן · או גררו תמונה לכאן</div>
+      </div>
+      <input type="file" id="fileItem" accept="image/*" class="sr" />
+
+      <!-- removal UI (hidden until an image is chosen) -->
+      <div id="removalUI" style="display:none;">
+        <div class="cutout-stage checker" style="margin-top:1rem;">
+          <canvas id="cutCanvas"></canvas>
+          <div class="busy" id="cutBusy"><span class="spinner"></span>מסיר רקע…</div>
+        </div>
+
+        <div class="ctrl">
+          <div class="ctrl-label"><span>עוצמת הסרת רקע</span><span class="val" id="tolVal">אוטומטי</span></div>
+          <input type="range" id="tol" min="8" max="140" value="42" />
+        </div>
+
+        <div class="chip-row">
+          <button class="chip" id="chipErase" title="מחיקה ידנית">
+            <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m20 20-9 .017"/><path d="M4.5 12.5 12 5l6.5 6.5a2 2 0 0 1 0 2.8L14 18.8a2 2 0 0 1-2.8 0L4.5 12.1"/></svg>
+            מחק ידני
+          </button>
+          <button class="chip" id="chipReset" title="אפס">
+            <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+            אפס רקע
+          </button>
+          <button class="chip" id="chipKeep" title="השאר רקע מקורי">
+            <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/></svg>
+            השאר רקע
+          </button>
+        </div>
+        <div class="ctrl" id="brushCtrl" style="display:none;">
+          <div class="ctrl-label"><span>גודל מחק</span><span class="val" id="brushVal">28px</span></div>
+          <input type="range" id="brush" min="8" max="90" value="28" />
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="itemReplace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h13l-2-2M21 17H8l2 2"/></svg>
+            החלף תמונה
+          </button>
+          <button class="btn btn-primary" id="itemNext">
+            המשך לחדר
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ STEP 2: ROOM ══ -->
+  <section class="panel" id="panel2">
+    <div class="card">
+      <h2>החדר / המקום <span class="badge">שלב 2</span></h2>
+      <p class="hint">צלמו או העלו את הסלון, חדר השינה, או כל מקום שבו אתם רוצים למקם את הרהיט.</p>
+
+      <div class="drop" id="dropRoom">
+        <div class="ico">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/>
+          </svg>
+        </div>
+        <div class="big">צלמו או העלו את החדר</div>
+        <div class="small">לחצו כאן · או גררו תמונה לכאן</div>
+      </div>
+      <input type="file" id="fileRoom" accept="image/*" class="sr" />
+
+      <div id="roomPreviewWrap" style="display:none; margin-top:1rem;">
+        <img id="roomPreview" class="thumb" alt="תצוגת החדר" />
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="roomBack">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          חזרה
+        </button>
+        <button class="btn btn-primary" id="roomNext" disabled>
+          הרכיבו לי את התמונה
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ STEP 3: COMPOSE ══ -->
+  <section class="panel" id="panel3">
+    <div class="card">
+      <h2>ככה זה נראה אצלכם <span class="badge">שלב 3</span></h2>
+      <p class="hint">גררו את הרהיט למקום, צביטה (2 אצבעות) לשינוי גודל וסיבוב, או השתמשו בכפתורים למטה.</p>
+
+      <div class="compose-stage" id="stage">
+        <img class="room-img" id="stageRoom" alt="" />
+        <div id="furnitureLayer"><img id="furnitureImg" alt="הרהיט" /></div>
+        <div class="stage-hint" id="stageHint">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2a8 8 0 0 1-7.4-4.9l-1.4-3.5a2 2 0 0 1 3.7-1.5L8 16"/></svg>
+          גררו למיקום · צביטה לגודל
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <div class="ctrl-label"><span>גודל</span><span class="val" id="scaleVal">100%</span></div>
+        <input type="range" id="scale" min="15" max="320" value="100" />
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-label"><span>סיבוב</span><span class="val" id="rotVal">0°</span></div>
+        <input type="range" id="rot" min="-45" max="45" value="0" />
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-label"><span>שקיפות (שילוב בחדר)</span><span class="val" id="opVal">100%</span></div>
+        <input type="range" id="op" min="35" max="100" value="100" />
+      </div>
+
+      <div class="chip-row">
+        <button class="chip" id="chipFlip">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M16 7l4 5-4 5"/><path d="M8 7l-4 5 4 5"/></svg>
+          היפוך
+        </button>
+        <button class="chip on" id="chipShadow">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="19" rx="7" ry="2.2"/><path d="M12 3v12"/><circle cx="12" cy="8" r="4"/></svg>
+          צל
+        </button>
+        <button class="chip" id="chipCenter">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="3"/></svg>
+          מרכז
+        </button>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="composeBack">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          חזרה
+        </button>
+        <button class="btn btn-primary" id="doExport">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          צור תמונה
+        </button>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div class="card" id="resultCard" style="display:none;">
+      <h2>התמונה מוכנה! 🎉</h2>
+      <p class="hint">שמרו את התמונה למכשיר, או שתפו אותה.</p>
+      <img id="resultImg" class="result-img" alt="הרהיט בחדר שלכם" />
+      <div class="btn-row">
+        <button class="btn btn-sage" id="btnShare" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          שיתוף
+        </button>
+        <a class="btn btn-primary" id="btnDownload" download="רהיט-בבית.png">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          הורדה
+        </a>
+      </div>
+      <button class="btn btn-ghost" id="btnRestart" style="margin-top:0.6rem;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        התחל מהתחלה
+      </button>
+    </div>
+  </section>
+
+  <footer>
+    כל העיבוד מתבצע במכשיר שלכם — התמונות לא נשלחות לשום שרת.<br>
+    רהיט בבית · הדמיית ריהוט
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ─────────────────────────  helpers  ───────────────────────── */
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const MAX_PROC = 1400;   // cap for background-removal working canvas
+  const MAX_OUT  = 2200;   // cap for exported image long side
+
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+
+  function loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith('image/')) { reject(new Error('לא נבחרה תמונה תקינה')); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('שגיאה בטעינת התמונה')); };
+      img.src = url;
+    });
+  }
+
+  /* ─────────────────────────  state  ───────────────────────── */
+  const state = {
+    // step 1 — furniture
+    procCanvas: document.createElement('canvas'), // working (uncropped) removal canvas
+    origData: null,       // pristine ImageData of proc image
+    cutoutCanvas: null,   // cropped final cutout (used in compose + export)
+    cutoutAspect: 1,
+    keepBg: false,
+    tolerance: 42,
+    // step 2 — room
+    roomImg: null,
+    // step 3 — placement (fractions relative to stage)
+    xf: 0.5, yf: 0.55,
+    scale: 1, rotation: 0, opacity: 1, flip: 1,
+    shadow: true,
+    BASE_FRAC: 0.45
+  };
+
+  /* ─────────────────────────  step navigation  ───────────────────────── */
+  function showStep(n) {
+    [1, 2, 3].forEach(i => $('panel' + i).classList.toggle('active', i === n));
+    document.querySelectorAll('.step-dot').forEach(d => {
+      const s = +d.dataset.step;
+      d.classList.toggle('active', s === n);
+      d.classList.toggle('done', s < n);
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.querySelectorAll('.step-dot').forEach(d => {
+    d.addEventListener('click', () => {
+      const s = +d.dataset.step;
+      if (s === 1) showStep(1);
+      else if (s === 2 && state.cutoutCanvas) showStep(2);
+      else if (s === 3 && state.cutoutCanvas && state.roomImg) { buildStage(); showStep(3); }
+    });
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     STEP 1 — FURNITURE + BACKGROUND REMOVAL
+     ═══════════════════════════════════════════════════════════════ */
+  const cutCanvas = $('cutCanvas');
+  const cutCtx = cutCanvas.getContext('2d', { willReadFrequently: true });
+
+  function wireDrop(dropEl, inputEl, onFile) {
+    dropEl.addEventListener('click', () => inputEl.click());
+    inputEl.addEventListener('change', e => { if (e.target.files[0]) onFile(e.target.files[0]); e.target.value = ''; });
+    ['dragenter', 'dragover'].forEach(ev => dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(ev => dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.remove('over'); }));
+    dropEl.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) onFile(f); });
+  }
+
+  async function onFurnitureFile(file) {
+    let img;
+    try { img = await loadImageFromFile(file); }
+    catch (err) { toast(err.message); return; }
+
+    // draw into working canvas (capped)
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const sc = Math.min(1, MAX_PROC / Math.max(w, h));
+    w = Math.round(w * sc); h = Math.round(h * sc);
+    const pc = state.procCanvas;
+    pc.width = w; pc.height = h;
+    const pctx = pc.getContext('2d', { willReadFrequently: true });
+    pctx.clearRect(0, 0, w, h);
+    pctx.drawImage(img, 0, 0, w, h);
+    state.origData = pctx.getImageData(0, 0, w, h);
+    state.keepBg = false;
+    $('chipKeep').classList.remove('on');
+
+    $('removalUI').style.display = 'block';
+    $('dropItem').style.display = 'none';
+    runRemoval();
+  }
+
+  /* Flood-fill background removal from the image borders.
+     Removes background regions that are connected to the edges and close
+     in colour to the sampled corner colour — ideal for product photos. */
+  function runRemoval() {
+    if (!state.origData) return;
+    const busy = $('cutBusy');
+    busy.classList.add('on');
+
+    // let the spinner paint before the heavy loop
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const src = state.origData;
+      const W = src.width, H = src.height;
+      const out = new ImageData(new Uint8ClampedArray(src.data), W, H);
+      const d = out.data;
+
+      if (!state.keepBg) {
+        floodRemove(d, W, H, state.tolerance);
+        featherEdges(d, W, H);
+      }
+
+      // paint to proc canvas then crop to bounding box
+      const pctx = state.procCanvas.getContext('2d');
+      pctx.putImageData(out, 0, 0);
+      cropCutout(out, W, H);
+
+      busy.classList.remove('on');
+    }));
+  }
+
+  function floodRemove(d, W, H, tol) {
+    const tol2 = tol * tol;
+    // sample background colour from the 4 corners
+    let br = 0, bg = 0, bb = 0, n = 0;
+    const pick = (x, y) => { const i = (y * W + x) * 4; br += d[i]; bg += d[i + 1]; bb += d[i + 2]; n++; };
+    for (let k = 0; k < 6; k++) {
+      pick(k, k); pick(W - 1 - k, k); pick(k, H - 1 - k); pick(W - 1 - k, H - 1 - k);
+    }
+    br /= n; bg /= n; bb /= n;
+
+    const visited = new Uint8Array(W * H);
+    const stack = [];
+    const near = (i) => {
+      const dr = d[i] - br, dg = d[i + 1] - bg, db = d[i + 2] - bb;
+      return (dr * dr + dg * dg + db * db) <= tol2;
+    };
+    const seed = (x, y) => {
+      const p = y * W + x;
+      if (visited[p]) return;
+      visited[p] = 1;
+      if (near(p * 4)) { d[p * 4 + 3] = 0; stack.push(p); }
+    };
+    // seed every border pixel
+    for (let x = 0; x < W; x++) { seed(x, 0); seed(x, H - 1); }
+    for (let y = 0; y < H; y++) { seed(0, y); seed(W - 1, y); }
+
+    while (stack.length) {
+      const p = stack.pop();
+      const x = p % W, y = (p / W) | 0;
+      if (x > 0)     tryPix(p - 1);
+      if (x < W - 1) tryPix(p + 1);
+      if (y > 0)     tryPix(p - W);
+      if (y < H - 1) tryPix(p + W);
+    }
+    function tryPix(p) {
+      if (visited[p]) return;
+      visited[p] = 1;
+      const i = p * 4;
+      if (near(i)) { d[i + 3] = 0; stack.push(p); }
+    }
+  }
+
+  /* soften the alpha edge so cutouts don't look jagged */
+  function featherEdges(d, W, H) {
+    const a = new Uint8ClampedArray(W * H);
+    for (let p = 0; p < W * H; p++) a[p] = d[p * 4 + 3];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const p = y * W + x;
+        if (a[p] === 0) continue;
+        let transparentNb = 0, total = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          total++;
+          if (a[ny * W + nx] === 0) transparentNb++;
+        }
+        if (transparentNb > 0) d[p * 4 + 3] = Math.round(a[p] * (1 - transparentNb / total * 0.85));
+      }
+    }
+  }
+
+  /* crop to the bounding box of visible pixels → tight cutout for compose */
+  function cropCutout(imgData, W, H) {
+    const d = imgData.data;
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (d[(y * W + x) * 4 + 3] > 12) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) { minX = 0; minY = 0; maxX = W - 1; maxY = H - 1; } // all transparent -> keep full
+    const cw = maxX - minX + 1, ch = maxY - minY + 1;
+
+    const cc = document.createElement('canvas');
+    cc.width = cw; cc.height = ch;
+    cc.getContext('2d').putImageData(imgData, -minX, -minY, minX, minY, cw, ch);
+    state.cutoutCanvas = cc;
+    state.cutoutAspect = cw / ch;
+
+    // show on the preview canvas (fit inside)
+    cutCanvas.width = cw; cutCanvas.height = ch;
+    cutCtx.clearRect(0, 0, cw, ch);
+    cutCtx.drawImage(cc, 0, 0);
+  }
+
+  // tolerance slider
+  $('tol').addEventListener('input', e => {
+    state.tolerance = +e.target.value;
+    $('tolVal').textContent = state.tolerance <= 20 ? 'עדין' : state.tolerance >= 110 ? 'חזק' : 'רגיל';
+    if (!state.keepBg) { clearTimeout(runRemoval._t); runRemoval._t = setTimeout(runRemoval, 120); }
+  });
+
+  $('chipReset').addEventListener('click', () => {
+    state.keepBg = false; $('chipKeep').classList.remove('on');
+    $('tol').value = 42; state.tolerance = 42; $('tolVal').textContent = 'רגיל';
+    setEraseMode(false);
+    runRemoval();
+  });
+
+  $('chipKeep').addEventListener('click', () => {
+    state.keepBg = !state.keepBg;
+    $('chipKeep').classList.toggle('on', state.keepBg);
+    setEraseMode(false);
+    runRemoval();
+  });
+
+  $('itemReplace').addEventListener('click', () => {
+    $('removalUI').style.display = 'none';
+    $('dropItem').style.display = 'block';
+    setEraseMode(false);
+  });
+
+  $('itemNext').addEventListener('click', () => {
+    if (!state.cutoutCanvas) { toast('בחרו קודם תמונה של הרהיט'); return; }
+    showStep(2);
+  });
+
+  /* ── manual eraser on the cutout preview ── */
+  let eraseMode = false, erasing = false, brushSize = 28;
+  function setEraseMode(on) {
+    eraseMode = on;
+    $('chipErase').classList.toggle('on', on);
+    $('brushCtrl').style.display = on ? 'block' : 'none';
+    cutCanvas.style.cursor = on ? 'crosshair' : 'default';
+  }
+  $('chipErase').addEventListener('click', () => setEraseMode(!eraseMode));
+  $('brush').addEventListener('input', e => { brushSize = +e.target.value; $('brushVal').textContent = brushSize + 'px'; });
+
+  function eraseAt(ev) {
+    const r = cutCanvas.getBoundingClientRect();
+    const x = (ev.clientX - r.left) / r.width * cutCanvas.width;
+    const y = (ev.clientY - r.top) / r.height * cutCanvas.height;
+    const rad = brushSize / r.width * cutCanvas.width;
+    // erase on both the preview and the master cutout canvas
+    [cutCtx, state.cutoutCanvas.getContext('2d')].forEach(ctx => {
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+  }
+  cutCanvas.addEventListener('pointerdown', e => { if (!eraseMode) return; erasing = true; cutCanvas.setPointerCapture(e.pointerId); eraseAt(e); });
+  cutCanvas.addEventListener('pointermove', e => { if (eraseMode && erasing) eraseAt(e); });
+  cutCanvas.addEventListener('pointerup',   () => { erasing = false; });
+  cutCanvas.addEventListener('pointercancel', () => { erasing = false; });
+
+  /* ═══════════════════════════════════════════════════════════════
+     STEP 2 — ROOM
+     ═══════════════════════════════════════════════════════════════ */
+  async function onRoomFile(file) {
+    let img;
+    try { img = await loadImageFromFile(file); }
+    catch (err) { toast(err.message); return; }
+    state.roomImg = img;
+    $('roomPreview').src = img.src;
+    // keep a stable src for the preview thumbnail
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    try { $('roomPreview').src = c.toDataURL('image/jpeg', 0.9); } catch (e) {}
+    $('roomPreviewWrap').style.display = 'block';
+    $('roomNext').disabled = false;
+  }
+
+  $('roomBack').addEventListener('click', () => showStep(1));
+  $('roomNext').addEventListener('click', () => {
+    if (!state.roomImg) { toast('בחרו תמונה של החדר'); return; }
+    buildStage(); showStep(3);
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     STEP 3 — COMPOSE
+     ═══════════════════════════════════════════════════════════════ */
+  const stage = $('stage');
+  const layer = $('furnitureLayer');
+  const furnImg = $('furnitureImg');
+
+  function buildStage() {
+    // size the stage to the room's aspect ratio
+    const rW = state.roomImg.naturalWidth, rH = state.roomImg.naturalHeight;
+    stage.style.aspectRatio = rW + ' / ' + rH;
+    $('stageRoom').src = $('roomPreview').src || state.roomImg.src;
+
+    furnImg.src = state.cutoutCanvas.toDataURL('image/png');
+
+    // reset placement each time we (re)enter compose only if fresh
+    if (buildStage._first !== state.cutoutCanvas) {
+      state.xf = 0.5; state.yf = 0.58; state.scale = 1; state.rotation = 0; state.opacity = 1; state.flip = 1;
+      $('scale').value = 100; $('scaleVal').textContent = '100%';
+      $('rot').value = 0; $('rotVal').textContent = '0°';
+      $('op').value = 100; $('opVal').textContent = '100%';
+      buildStage._first = state.cutoutCanvas;
+    }
+    layer.classList.add('selected');
+    requestAnimationFrame(layoutFurniture);
+
+    // fade the hint after a moment
+    clearTimeout(buildStage._h);
+    $('stageHint').style.opacity = '1';
+    buildStage._h = setTimeout(() => { $('stageHint').style.opacity = '0'; }, 3200);
+  }
+
+  function layoutFurniture() {
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const w = state.scale * state.BASE_FRAC * sw;
+    layer.style.width = w + 'px';
+    layer.style.left = (state.xf * sw) + 'px';
+    layer.style.top = (state.yf * sh) + 'px';
+    layer.style.opacity = state.opacity;
+    layer.style.transform =
+      'translate(-50%,-50%) rotate(' + state.rotation + 'deg) scaleX(' + state.flip + ')';
+    furnImg.style.filter = state.shadow
+      ? 'drop-shadow(0 ' + (w * 0.03) + 'px ' + (w * 0.05) + 'px rgba(0,0,0,0.38))'
+      : 'none';
+  }
+  window.addEventListener('resize', () => { if ($('panel3').classList.contains('active')) layoutFurniture(); });
+
+  /* pointer interactions: single-finger drag, two-finger pinch (scale + rotate) */
+  const pointers = new Map();
+  let gesture = null;
+  function stagePoint(ev) {
+    const r = stage.getBoundingClientRect();
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  }
+  layer.addEventListener('pointerdown', e => {
+    layer.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, stagePoint(e));
+    layer.classList.add('selected');
+    if (pointers.size === 1) {
+      const p = stagePoint(e);
+      gesture = { mode: 'drag', startX: p.x, startY: p.y, xf0: state.xf, yf0: state.yf };
+    } else if (pointers.size === 2) {
+      const pts = [...pointers.values()];
+      gesture = {
+        mode: 'pinch',
+        dist0: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+        ang0: Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x),
+        scale0: state.scale, rot0: state.rotation
+      };
+    }
+    e.preventDefault();
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, stagePoint(e));
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    if (gesture && gesture.mode === 'drag' && pointers.size === 1) {
+      const p = stagePoint(e);
+      state.xf = clamp(gesture.xf0 + (p.x - gesture.startX) / sw, -0.15, 1.15);
+      state.yf = clamp(gesture.yf0 + (p.y - gesture.startY) / sh, -0.15, 1.15);
+      layoutFurniture();
+    } else if (gesture && gesture.mode === 'pinch' && pointers.size >= 2) {
+      const pts = [...pointers.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const ang = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
+      state.scale = clamp(gesture.scale0 * (dist / gesture.dist0), 0.15, 3.2);
+      state.rotation = clamp(gesture.rot0 + (ang - gesture.ang0) * 180 / Math.PI, -85, 85);
+      syncSliders();
+      layoutFurniture();
+    }
+  });
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size === 0) gesture = null;
+    else if (pointers.size === 1) {
+      const p = [...pointers.values()][0];
+      gesture = { mode: 'drag', startX: p.x, startY: p.y, xf0: state.xf, yf0: state.yf };
+    }
+  }
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', endPointer);
+
+  function syncSliders() {
+    $('scale').value = Math.round(state.scale * 100);
+    $('scaleVal').textContent = Math.round(state.scale * 100) + '%';
+    $('rot').value = Math.round(state.rotation);
+    $('rotVal').textContent = Math.round(state.rotation) + '°';
+  }
+
+  // sliders
+  $('scale').addEventListener('input', e => { state.scale = (+e.target.value) / 100; $('scaleVal').textContent = e.target.value + '%'; layoutFurniture(); });
+  $('rot').addEventListener('input', e => { state.rotation = +e.target.value; $('rotVal').textContent = e.target.value + '°'; layoutFurniture(); });
+  $('op').addEventListener('input', e => { state.opacity = (+e.target.value) / 100; $('opVal').textContent = e.target.value + '%'; layoutFurniture(); });
+
+  $('chipFlip').addEventListener('click', () => { state.flip *= -1; $('chipFlip').classList.toggle('on', state.flip === -1); layoutFurniture(); });
+  $('chipShadow').addEventListener('click', () => { state.shadow = !state.shadow; $('chipShadow').classList.toggle('on', state.shadow); layoutFurniture(); });
+  $('chipCenter').addEventListener('click', () => { state.xf = 0.5; state.yf = 0.58; layoutFurniture(); });
+  $('composeBack').addEventListener('click', () => showStep(2));
+
+  /* ── export to a full-resolution PNG ── */
+  function renderExport() {
+    const rW = state.roomImg.naturalWidth, rH = state.roomImg.naturalHeight;
+    const outScale = Math.min(1, MAX_OUT / Math.max(rW, rH));
+    const W = Math.round(rW * outScale), H = Math.round(rH * outScale);
+
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(state.roomImg, 0, 0, W, H);
+
+    const fw = state.scale * state.BASE_FRAC * W;       // furniture width in output px
+    const fh = fw / state.cutoutAspect;
+    const cx = state.xf * W, cy = state.yf * H;
+
+    ctx.save();
+    ctx.globalAlpha = state.opacity;
+    if (state.shadow) {
+      ctx.shadowColor = 'rgba(0,0,0,0.38)';
+      ctx.shadowBlur = fw * 0.05;
+      ctx.shadowOffsetY = fw * 0.03;
+    }
+    ctx.translate(cx, cy);
+    ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.scale(state.flip, 1);
+    ctx.drawImage(state.cutoutCanvas, -fw / 2, -fh / 2, fw, fh);
+    ctx.restore();
+    return cv;
+  }
+
+  $('doExport').addEventListener('click', () => {
+    layer.classList.remove('selected');
+    let cv;
+    try { cv = renderExport(); }
+    catch (err) { toast('שגיאה ביצירת התמונה'); return; }
+    const url = cv.toDataURL('image/png');
+    $('resultImg').src = url;
+    $('btnDownload').href = url;
+    $('resultCard').style.display = 'block';
+
+    // Web Share (files) if supported
+    cv.toBlob(blob => {
+      if (!blob) return;
+      renderExport._blob = blob;
+      const canShare = navigator.canShare && navigator.canShare({ files: [new File([blob], 'room.png', { type: 'image/png' })] });
+      $('btnShare').style.display = canShare ? 'inline-flex' : 'none';
+    }, 'image/png');
+
+    $('resultCard').scrollIntoView({ behavior: 'smooth' });
+    toast('התמונה נוצרה — אפשר להוריד ולשתף');
+  });
+
+  $('btnShare').addEventListener('click', async () => {
+    const blob = renderExport._blob;
+    if (!blob) return;
+    const file = new File([blob], 'רהיט-בבית.png', { type: 'image/png' });
+    try { await navigator.share({ files: [file], title: 'רהיט בבית', text: 'ככה הרהיט נראה אצלי בבית 🛋️' }); }
+    catch (e) { /* user cancelled */ }
+  });
+
+  $('btnRestart').addEventListener('click', () => {
+    state.cutoutCanvas = null; state.origData = null; state.roomImg = null;
+    buildStage._first = null;
+    $('removalUI').style.display = 'none';
+    $('dropItem').style.display = 'block';
+    $('roomPreviewWrap').style.display = 'none';
+    $('roomNext').disabled = true;
+    $('resultCard').style.display = 'none';
+    showStep(1);
+  });
+
+  /* ─────────────────────────  wire up  ───────────────────────── */
+  wireDrop($('dropItem'), $('fileItem'), onFurnitureFile);
+  wireDrop($('dropRoom'), $('fileRoom'), onRoomFile);
+})();
+</script>
+</body>
+</html>
