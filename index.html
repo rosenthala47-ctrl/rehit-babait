@@ -532,7 +532,7 @@
 
   <footer>
     כל העיבוד מתבצע במכשיר שלכם — התמונות לא נשלחות לשום שרת.<br>
-    רהיט בבית · הדמיית ריהוט · <span id="ver">גרסה 5</span>
+    רהיט בבית · הדמיית ריהוט · <span id="ver">גרסה 6</span>
   </footer>
 </div>
 
@@ -613,6 +613,7 @@
     detectDoneFor: null,    // room Image the detections belong to
     roomBg: null,           // edited room canvas (old couch erased) | null
     detectError: null,      // last detector failure reason | null
+    floorYf: null,          // estimated floor line (fraction of height)
     plan: null,             // current placement plan {mode,target,xf,yf,scale}
     replaceEnabled: true,   // when an old couch is found, replace it
     // step 3 — placement (center fractions relative to stage)
@@ -628,16 +629,21 @@
      find the widest free span on the floor that avoids obstacles and
      return where to drop the item (center fractions + scale).
      ═══════════════════════════════════════════════════════════════ */
-  function computePlacement(rW, rH, dets, itemAspect, BASE) {
+  function computePlacement(rW, rH, dets, itemAspect, BASE, floorYf) {
     BASE = BASE || 0.45;
-    // estimate the floor line from the bottoms of furniture standing on the floor
-    let yBase = rH * 0.88;
-    const bottoms = [];
-    for (const d of (dets || [])) {
-      const c = (d.class || '').toLowerCase();
-      if (FLOOR_SET.has(c) && (d.score == null ? 1 : d.score) >= 0.4) bottoms.push(d.bbox[1] + d.bbox[3]);
+    // where the item's base rests on the floor
+    let yBase;
+    if (floorYf != null) {
+      yBase = clamp(floorYf, 0.4, 0.99) * rH;
+    } else {
+      yBase = rH * 0.88;
+      const bottoms = [];
+      for (const d of (dets || [])) {
+        const c = (d.class || '').toLowerCase();
+        if (FLOOR_SET.has(c) && (d.score == null ? 1 : d.score) >= 0.4) bottoms.push(d.bbox[1] + d.bbox[3]);
+      }
+      if (bottoms.length) { bottoms.sort((a, b) => a - b); yBase = clamp(bottoms[Math.floor(bottoms.length * 0.6)], rH * 0.5, rH * 0.99); }
     }
-    if (bottoms.length) { bottoms.sort((a, b) => a - b); yBase = clamp(bottoms[Math.floor(bottoms.length * 0.6)], rH * 0.5, rH * 0.99); }
 
     // size the new item to match existing furniture (realistic scale), else a sensible default
     const widthByClass = {};
@@ -693,6 +699,39 @@
   }
   window.__computePlacement = computePlacement;   // test hook
 
+  // floor line as a fraction of height: prefer detected furniture bottoms,
+  // otherwise find the strongest wall→floor colour transition in the image.
+  function estimateFloorYf(dets, dw, dh, dc) {
+    const bottoms = [];
+    for (const d of (dets || [])) {
+      const c = (d.class || '').toLowerCase();
+      if (FLOOR_SET.has(c) && (d.score == null ? 1 : d.score) >= 0.4) bottoms.push((d.bbox[1] + d.bbox[3]) / dh);
+    }
+    if (bottoms.length) { bottoms.sort((a, b) => a - b); return clamp(bottoms[Math.floor(bottoms.length * 0.6)], 0.45, 0.99); }
+    return detectFloorLine(dc);
+  }
+  function detectFloorLine(dc) {
+    try {
+      const W = dc.width, H = dc.height;
+      const d = dc.getContext('2d').getImageData(0, 0, W, H).data;
+      const x0 = Math.floor(W * 0.30), x1 = Math.floor(W * 0.70);
+      const rowMean = (y) => {
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let x = x0; x < x1; x += 2) { const i = (y * W + x) * 4; r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+        return [r / n, g / n, b / n];
+      };
+      const delta = Math.max(2, Math.floor(H * 0.02));
+      let bestY = -1, bestDiff = -1;
+      for (let y = Math.floor(H * 0.40); y <= Math.floor(H * 0.92); y++) {
+        const up = rowMean(Math.max(0, y - delta)), dn = rowMean(Math.min(H - 1, y + delta));
+        const diff = (up[0] - dn[0]) ** 2 + (up[1] - dn[1]) ** 2 + (up[2] - dn[2]) ** 2;
+        if (diff > bestDiff) { bestDiff = diff; bestY = y; }
+      }
+      if (bestDiff < 300) return 0.85;                 // no clear horizon
+      return clamp(bestY / H, 0.45, 0.92);
+    } catch (e) { return 0.85; }
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      REPLACE ENGINE — detect an existing couch, erase it and drop the
      new item exactly onto its footprint.
@@ -721,7 +760,7 @@
       const cy = baseY - Hf / 2;
       return { mode: 'replace', target: couch, xf: cx / dw, yf: cy / dh, scale: targetW / (state.BASE_FRAC * dw) };
     }
-    const P = computePlacement(dw, dh, dets, state.cutoutAspect, state.BASE_FRAC);
+    const P = computePlacement(dw, dh, dets, state.cutoutAspect, state.BASE_FRAC, state.floorYf);
     return { mode: 'free', target: null, xf: P.xf, yf: P.yf, scale: P.scale };
   }
 
@@ -1076,6 +1115,7 @@
 
     state.detections = dets;
     state.detectDoneFor = state.roomImg;
+    state.floorYf = estimateFloorYf(dets, dw, dh, dc);   // ground the item on the real floor line
     state.roomBg = null;          // force fresh edited-room build below
     applyPlan(true);
     setAnalyzing(false);
@@ -1225,11 +1265,11 @@
     // ground contact shadow
     const gs = $('groundShadow');
     if (state.shadow) {
-      const gw = w * 0.92, gh = Math.max(9, w * 0.14);
+      const gw = w * 1.02, gh = Math.max(12, w * 0.17);
       const baseY = cyp + dispH / 2;
       gs.style.width = gw + 'px'; gs.style.height = gh + 'px';
       gs.style.left = (cxp - gw / 2) + 'px';
-      gs.style.top = (baseY - gh * 0.62) + 'px';
+      gs.style.top = (baseY - gh * 0.55) + 'px';
       gs.classList.add('on');
     } else {
       gs.classList.remove('on');
@@ -1317,14 +1357,14 @@
     // ground contact shadow (elliptical) beneath the item
     if (state.shadow) {
       const baseY = cy + fh / 2;
-      const gw = fw * 0.92, gh = Math.max(6, fw * 0.14);
+      const gw = fw * 1.02, gh = Math.max(8, fw * 0.17);
       ctx.save();
-      ctx.translate(cx, baseY - gh * 0.12);
+      ctx.translate(cx, baseY - gh * 0.1);
       ctx.scale(1, gh / gw);
       const rad = gw / 2;
       const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, rad);
-      grd.addColorStop(0, 'rgba(0,0,0,0.34)');
-      grd.addColorStop(0.5, 'rgba(0,0,0,0.15)');
+      grd.addColorStop(0, 'rgba(0,0,0,0.40)');
+      grd.addColorStop(0.5, 'rgba(0,0,0,0.18)');
       grd.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grd;
       ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.fill();
