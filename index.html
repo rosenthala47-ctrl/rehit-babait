@@ -532,7 +532,7 @@
 
   <footer>
     כל העיבוד מתבצע במכשיר שלכם — התמונות לא נשלחות לשום שרת.<br>
-    רהיט בבית · הדמיית ריהוט · <span id="ver">גרסה 4</span>
+    רהיט בבית · הדמיית ריהוט · <span id="ver">גרסה 5</span>
   </footer>
 </div>
 
@@ -638,7 +638,18 @@
       if (FLOOR_SET.has(c) && (d.score == null ? 1 : d.score) >= 0.4) bottoms.push(d.bbox[1] + d.bbox[3]);
     }
     if (bottoms.length) { bottoms.sort((a, b) => a - b); yBase = clamp(bottoms[Math.floor(bottoms.length * 0.6)], rH * 0.5, rH * 0.99); }
-    let Wf = Math.min(rW * 0.52, rH * 0.5 * itemAspect);      // sensible starting width (also caps height)
+
+    // size the new item to match existing furniture (realistic scale), else a sensible default
+    const widthByClass = {};
+    for (const d of (dets || [])) {
+      const c = (d.class || '').toLowerCase();
+      if (FLOOR_SET.has(c) && (d.score == null ? 1 : d.score) >= 0.4) widthByClass[c] = Math.max(widthByClass[c] || 0, d.bbox[2]);
+    }
+    let refW = widthByClass['couch'] || widthByClass['sofa'] || widthByClass['bed'] ||
+               widthByClass['dining table'] || widthByClass['diningtable'] || 0;
+    if (!refW && widthByClass['chair']) refW = widthByClass['chair'] * 2.4;   // a sofa ≈ 2.4 chairs wide
+    let Wf = refW ? clamp(refW * 1.02, rW * 0.22, rW * 0.7) : Math.min(rW * 0.52, rH * 0.5 * itemAspect);
+    Wf = Math.min(Wf, rH * 0.6 * itemAspect);                // never absurdly tall
     let Hf = Wf / itemAspect;
 
     function forbiddenIntervals(Wf, Hf) {
