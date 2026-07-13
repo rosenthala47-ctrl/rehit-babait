@@ -265,6 +265,8 @@
       line-height: 1.5; display: flex; gap: 0.5rem; align-items: flex-start;
     }
     .summary svg { width: 18px; height: 18px; flex-shrink: 0; stroke: var(--clay-dk); fill: none; margin-top: 1px; }
+    .summary.warn { background: #f7e0d6; color: #9a3d1f; }
+    .summary.warn svg { stroke: #9a3d1f; }
 
     /* ── Fine-tune (collapsible) ── */
     details.tune {
@@ -530,7 +532,7 @@
 
   <footer>
     כל העיבוד מתבצע במכשיר שלכם — התמונות לא נשלחות לשום שרת.<br>
-    רהיט בבית · הדמיית ריהוט
+    רהיט בבית · הדמיית ריהוט · <span id="ver">גרסה 4</span>
   </footer>
 </div>
 
@@ -569,21 +571,30 @@
   /* ─────────────────────────  scene-analysis vocabulary  ───────────────────────── */
   // COCO class → Hebrew label
   const HE = {
-    'tv': 'טלוויזיה', 'laptop': 'מחשב', 'dining table': 'שולחן', 'diningtable': 'שולחן',
-    'bed': 'מיטה', 'couch': 'ספה קיימת', 'sofa': 'ספה קיימת', 'chair': 'כיסא',
+    'tv': 'טלוויזיה', 'laptop': 'מחשב נייד', 'keyboard': 'מקלדת', 'mouse': 'עכבר', 'remote': 'שלט',
+    'dining table': 'שולחן', 'diningtable': 'שולחן', 'desk': 'שולחן',
+    'bed': 'מיטה', 'couch': 'ספה', 'sofa': 'ספה', 'chair': 'כיסא / כורסה',
     'refrigerator': 'מקרר', 'oven': 'תנור', 'sink': 'כיור', 'toilet': 'אסלה',
-    'microwave': 'מיקרוגל', 'potted plant': 'עציץ', 'pottedplant': 'עציץ',
-    'book': 'ספר', 'vase': 'אגרטל', 'clock': 'שעון', 'person': 'אדם',
-    'cat': 'חתול', 'dog': 'כלב', 'bench': 'ספסל'
+    'microwave': 'מיקרוגל', 'toaster': 'טוסטר',
+    'potted plant': 'עציץ', 'pottedplant': 'עציץ',
+    'book': 'ספר', 'vase': 'אגרטל', 'clock': 'שעון', 'bench': 'ספסל',
+    'cup': 'כוס', 'bowl': 'קערה', 'bottle': 'בקבוק', 'wine glass': 'כוס יין',
+    'person': 'אדם', 'cat': 'חתול', 'dog': 'כלב'
   };
   // things a floor item must NOT overlap / sit on
   const OBSTACLE_SET = new Set([
-    'tv', 'dining table', 'diningtable', 'bed', 'couch', 'sofa', 'chair',
+    'tv', 'dining table', 'diningtable', 'desk', 'bed', 'couch', 'sofa', 'chair',
     'refrigerator', 'oven', 'sink', 'toilet', 'potted plant', 'pottedplant',
-    'bench', 'microwave'
+    'bench', 'microwave', 'toaster'
   ]);
-  // classes we draw as detection boxes (obstacles + a few informative extras)
-  const SHOW_SET = new Set([...OBSTACLE_SET, 'laptop', 'book', 'vase', 'clock', 'person', 'cat', 'dog']);
+  // items standing on the floor — their base marks the floor line
+  const FLOOR_SET = new Set([
+    'couch', 'sofa', 'chair', 'dining table', 'diningtable', 'desk', 'bed',
+    'potted plant', 'pottedplant', 'bench', 'refrigerator', 'person'
+  ]);
+  // classes we draw as detection boxes (everything informative)
+  const SHOW_SET = new Set([...OBSTACLE_SET, 'laptop', 'keyboard', 'remote', 'book', 'vase',
+    'clock', 'cup', 'bowl', 'bottle', 'wine glass', 'person', 'cat', 'dog']);
 
   /* ─────────────────────────  state  ───────────────────────── */
   const state = {
@@ -601,6 +612,7 @@
     detW: 0, detH: 0,
     detectDoneFor: null,    // room Image the detections belong to
     roomBg: null,           // edited room canvas (old couch erased) | null
+    detectError: null,      // last detector failure reason | null
     plan: null,             // current placement plan {mode,target,xf,yf,scale}
     replaceEnabled: true,   // when an old couch is found, replace it
     // step 3 — placement (center fractions relative to stage)
@@ -618,7 +630,14 @@
      ═══════════════════════════════════════════════════════════════ */
   function computePlacement(rW, rH, dets, itemAspect, BASE) {
     BASE = BASE || 0.45;
-    const yBase = rH * 0.90;                                  // where the item's base rests on the floor
+    // estimate the floor line from the bottoms of furniture standing on the floor
+    let yBase = rH * 0.88;
+    const bottoms = [];
+    for (const d of (dets || [])) {
+      const c = (d.class || '').toLowerCase();
+      if (FLOOR_SET.has(c) && (d.score == null ? 1 : d.score) >= 0.4) bottoms.push(d.bbox[1] + d.bbox[3]);
+    }
+    if (bottoms.length) { bottoms.sort((a, b) => a - b); yBase = clamp(bottoms[Math.floor(bottoms.length * 0.6)], rH * 0.5, rH * 0.99); }
     let Wf = Math.min(rW * 0.52, rH * 0.5 * itemAspect);      // sensible starting width (also caps height)
     let Hf = Wf / itemAspect;
 
@@ -972,8 +991,15 @@
   /* ═══════════════════════════════════════════════════════════════
      OBJECT DETECTION  (TensorFlow.js COCO-SSD, loaded on demand)
      ═══════════════════════════════════════════════════════════════ */
-  const CDN_TF   = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
-  const CDN_COCO = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
+  const TF_SRCS = [
+    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js',
+    'https://unpkg.com/@tensorflow/tfjs@4.22.0/dist/tf.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.22.0/tf.min.js'
+  ];
+  const COCO_SRCS = [
+    'https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js',
+    'https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js'
+  ];
   let detector = null, detectorPromise = null;
 
   function loadScript(src) {
@@ -985,16 +1011,25 @@
       document.head.appendChild(s);
     });
   }
+  async function loadFirst(srcs) {
+    let err;
+    for (const s of srcs) { try { await loadScript(s); return; } catch (e) { err = e; } }
+    throw err || new Error('all sources failed');
+  }
+  function withTimeout(promise, ms, msg) {
+    return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(msg || 'timeout')), ms))]);
+  }
   function ensureDetector() {
     if (window.__mockDetector) return Promise.resolve(window.__mockDetector);   // test hook
     if (detector) return Promise.resolve(detector);
     if (detectorPromise) return detectorPromise;
     detectorPromise = (async () => {
       if (typeof window.cocoSsd === 'undefined') {
-        if (typeof window.tf === 'undefined') await loadScript(CDN_TF);
-        await loadScript(CDN_COCO);
+        if (typeof window.tf === 'undefined') await loadFirst(TF_SRCS);
+        await loadFirst(COCO_SRCS);
       }
-      detector = await window.cocoSsd.load({ base: 'lite_mobilenet_v2' });
+      try { detector = await window.cocoSsd.load({ base: 'lite_mobilenet_v2' }); }
+      catch (e) { detector = await window.cocoSsd.load(); }   // fall back to the default (heavier) model
       return detector;
     })();
     return detectorPromise;
@@ -1016,14 +1051,15 @@
     dc.getContext('2d').drawImage(state.roomImg, 0, 0, dw, dh);
     state.detW = dw; state.detH = dh;
 
-    let dets = null;
+    let dets = null; state.detectError = null;
     try {
-      const model = await ensureDetector();
+      setAnalyzing(true, 'טוען מנתח AI… (בפעם הראשונה עד ~20 שניות)');
+      const model = await withTimeout(ensureDetector(), 45000, 'load-timeout');
       if (token !== analyzeToken) return;
       setAnalyzing(true, 'מנתח את החדר…');
-      dets = await model.detect(dc, 20);
+      dets = await withTimeout(model.detect(dc, 20), 20000, 'detect-timeout');
     } catch (e) {
-      dets = null;   // offline / blocked → graceful fallback
+      dets = null; state.detectError = (e && e.message) || 'error';   // offline / blocked → graceful fallback
     }
     if (token !== analyzeToken) return;
 
@@ -1082,7 +1118,7 @@
     for (const d of dets) {
       if (d === target) continue;                        // the replaced couch isn't shown
       const c = (d.class || '').toLowerCase();
-      if (!SHOW_SET.has(c) || d.score < 0.45) continue;
+      if (!SHOW_SET.has(c) || d.score < 0.35) continue;
       const bx = d.bbox[0], by = d.bbox[1], bw = d.bbox[2], bh = d.bbox[3];
       const box = document.createElement('div');
       box.className = 'box' + (OBSTACLE_SET.has(c) ? ' block' : '');
@@ -1098,21 +1134,22 @@
 
   function showSummary(dets, plan) {
     const el = $('summary');
-    let txt;
-    if (plan && plan.mode === 'replace') {
-      txt = 'זיהיתי ספה קיימת בסלון — הסרתי אותה והרכבתי בדיוק במקומה את הספה החדשה שלך. אפשר לכוונן ידנית.';
-    } else if (dets === null) {
-      txt = 'מיקום אוטומטי בוצע לפי הרצפה. הזיהוי החכם של רהיטים דורש חיבור לאינטרנט — אם הוא לא נטען, אפשר לכוונן ידנית.';
+    let txt, warn = false;
+    if (dets === null) {
+      warn = true;
+      const reason = /timeout/.test(state.detectError || '') ? 'לקח יותר מדי זמן' : 'לא הצליח להיטען';
+      txt = '⚠ הזיהוי החכם ' + reason + '. הוא דורש חיבור לאינטרנט (ובפעם הראשונה כמה שניות להורדת המודל). רעננו את העמוד — Ctrl+Shift+R. בינתיים מיקמתי לפי הרצפה; אפשר לכוונן ידנית.';
     } else {
-      const names = [], seen = new Set();
-      for (const d of dets) {
-        const c = (d.class || '').toLowerCase();
-        if (OBSTACLE_SET.has(c) && d.score > 0.45 && !seen.has(c)) { seen.add(c); names.push(HE[c] || c); }
-      }
-      txt = names.length
-        ? 'זיהיתי בחדר: ' + names.join(', ') + ' — ומיקמתי את הרהיט במקום הפנוי, הרחק מהם.'
-        : 'לא זוהו מכשולים בולטים — מיקמתי את הרהיט במרכז הרצפה. אפשר לכוונן ידנית.';
+      // count every relevant item detected
+      const counts = {};
+      for (const d of dets) { const c = (d.class || '').toLowerCase(); if (SHOW_SET.has(c) && d.score > 0.4) counts[c] = (counts[c] || 0) + 1; }
+      const parts = Object.keys(counts).map(c => (HE[c] || c) + (counts[c] > 1 ? ' ×' + counts[c] : ''));
+      const total = parts.length ? Object.values(counts).reduce((a, b) => a + b, 0) : 0;
+      const listed = total ? ('זיהיתי ' + total + ' פריטים: ' + parts.join(', ') + '. ') : 'לא זוהו רהיטים בולטים בתמונה. ';
+      if (plan && plan.mode === 'replace') txt = listed + 'הסרתי את הספה הקיימת והרכבתי בדיוק במקומה את הספה החדשה שלך. אפשר לכוונן ידנית.';
+      else txt = listed + 'מיקמתי את הרהיט במקום הפנוי המתאים, על הרצפה, הרחק מהמכשולים. אפשר לכוונן ידנית.';
     }
+    el.classList.toggle('warn', warn);
     el.innerHTML = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>' + txt + '</span>';
     el.style.display = 'flex';
   }
