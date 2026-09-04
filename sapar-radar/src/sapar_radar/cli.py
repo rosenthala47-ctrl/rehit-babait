@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import Config, ConfigError, require_env
+from .doctor import run_doctor
 from .export import format_summary, write_csv, write_json
 from .models import VERDICT_LABELS_HE
 from .pipeline import Pipeline
@@ -44,9 +45,28 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--db", type=Path, default=Path("out/sapar_radar.db"), help="state database"
     )
+
+    # The same global flags again, accepted *after* the subcommand too, because
+    # `run --area X -v` is what people naturally type. SUPPRESS keeps an absent
+    # flag from overwriting the value already parsed before the subcommand.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "-v", "--verbose", action="store_true",
+        default=argparse.SUPPRESS, help="debug logging",
+    )
+    common.add_argument(
+        "--config", type=Path, default=argparse.SUPPRESS, help="path to config.yaml"
+    )
+    common.add_argument(
+        "--db", type=Path, default=argparse.SUPPRESS, help="state database"
+    )
+
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run = sub.add_parser("run", help="run a full discovery + classification pass")
+    run = sub.add_parser(
+        "run", parents=[common],
+        help="run a full discovery + classification pass",
+    )
     run.add_argument("--mock", action="store_true",
                      help="use offline fixtures - no API key needed")
     run.add_argument("--area", action="append",
@@ -64,16 +84,30 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--dry-run", action="store_true",
                      help="print results without writing files or state")
 
-    export = sub.add_parser("export", help="re-export everything reported so far")
+    export = sub.add_parser("export", parents=[common], help="re-export everything reported so far")
     export.add_argument("--limit", type=int, default=1000)
 
-    mark = sub.add_parser("mark", help="set the contact status of a shop")
+    mark = sub.add_parser("mark", parents=[common], help="set the contact status of a shop")
     mark.add_argument("identifier", help="phone number or place_id")
     mark.add_argument("status", choices=CONTACT_STATUSES)
     mark.add_argument("--notes")
 
-    sub.add_parser("stats", help="show pipeline counters from the database")
-    sub.add_parser("platforms", help="list the booking platforms being detected")
+    doctor = sub.add_parser(
+        "doctor", parents=[common],
+        help="check your setup and report exactly what is missing",
+    )
+    doctor.add_argument(
+        "--offline", action="store_true",
+        help="skip the live Google API test",
+    )
+
+    sub.add_parser(
+        "stats", parents=[common], help="show pipeline counters from the database"
+    )
+    sub.add_parser(
+        "platforms", parents=[common],
+        help="list the booking platforms being detected",
+    )
     return parser
 
 
@@ -204,6 +238,10 @@ def cmd_mark(args: argparse.Namespace, _config: Config) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace, config: Config) -> int:
+    return run_doctor(config, skip_live=args.offline)
+
+
 def cmd_stats(args: argparse.Namespace, _config: Config) -> int:
     store = Store(args.db)
     for key, value in sorted(store.stats().items()):
@@ -231,6 +269,7 @@ def cmd_platforms(_args: argparse.Namespace, config: Config) -> int:
 
 COMMANDS = {
     "run": cmd_run,
+    "doctor": cmd_doctor,
     "export": cmd_export,
     "mark": cmd_mark,
     "stats": cmd_stats,
