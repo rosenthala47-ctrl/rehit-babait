@@ -1,0 +1,111 @@
+# Known appointment / queue-management platforms.
+# If a barbershop's "website" points at one of these domains, or its homepage
+# links to one, it already has a booking system -> it is NOT a lead.
+#
+# This list is the single most important knob in the whole agent.
+# Add every competitor you meet in the field; the agent reloads it each run.
+
+israeli:
+  - nello.co.il          # נלו
+  - arbox.co.il          # ארבוקס
+  - quicktor.co.il       # QuickTor
+  - plannie.co.il        # Plannie
+  - calmark.co.il        # קלמארק
+  - pinkapp.co.il        # Pink
+  - zmantov.co.il        # זמן טוב
+  - simpletor.app        # Simple Tor
+  # Add every Israeli competitor you meet in the field - this list is what
+  # stops you wasting calls on shops that already have a system.
+
+global:
+  - booksy.com
+  - booksy.net
+  - fresha.com
+  - getsquire.com
+  - squire.co
+  - zenoti.com
+  - setmore.com
+  - simplybook.me
+  - simplybook.it
+  - treatwell.com
+  - vagaro.com
+  - mindbodyonline.com
+  - schedulicity.com
+  - acuityscheduling.com
+  - squareup.com/appointments
+  - book.squareup.com
+  - calendly.com
+  - planity.com
+  - phorest.com
+  - timely.com
+  - gettimely.com
+  - trafft.com
+  - shedul.com
+  - salonized.com
+  - goldiapp.com
+  - appointy.com
+  - picktime.com
+  - reservio.com
+  - bookla.com
+
+# Social profiles are NOT a website and NOT a booking system.
+# A shop whose only "website" is one of these is a *prime* lead.
+social_only:
+  - facebook.com
+  - fb.com
+  - fb.me
+  - instagram.com
+  - instagr.am
+  - tiktok.com
+  - wa.me
+  - api.whatsapp.com
+  - chat.whatsapp.com
+  - linktr.ee
+  - linktree.com
+  - t.me
+  - telegram.me
+  - youtube.com
+  - x.com
+  - twitter.com
+  - waze.com
+  - g.page
+  - maps.app.goo.gl
+  - business.site        # Google Business auto-site: barely a website
+  - sites.google.com
+
+# Free/DIY site builders whose presence still means "no real booking flow"
+# unless a booking signature is found on the page. Kept separate so you can
+# decide how aggressive to be (see config.example.yaml -> treat_builders_as).
+site_builders:
+  - wixsite.com
+  - wix.com
+  - squarespace.com
+  - weebly.com
+  - webydo.com
+  - ravpage.co.il
+  - rav-page.com
+
+# Text that appears on a page when it *does* offer online booking.
+# Matched case-insensitively against the fetched homepage HTML.
+booking_keywords_he:
+  - קביעת תור
+  - קביעת תורים
+  - לקביעת תור
+  - הזמנת תור
+  - זימון תור
+  - זימון תורים
+  - קבע תור
+  - קבעו תור
+  - הזמן תור
+  - הזמינו תור
+  - יומן תורים
+  - תור אונליין
+
+booking_keywords_en:
+  - book now
+  - book online
+  - book an appointment
+  - make an appointment
+  - schedule appointment
+  - online booking
+  - book appointment

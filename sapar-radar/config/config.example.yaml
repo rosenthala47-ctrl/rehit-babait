@@ -1,0 +1,81 @@
+# Copy to config/config.yaml and edit. config.yaml is git-ignored.
+
+search:
+  # Google Places "Text Search" is run as: "<query> <area>" for every
+  # combination below. Keep queries in the language the listings use.
+  queries:
+    - מספרה
+    - ברברשופ
+    - ספר גברים
+    - barber shop
+    - hair salon
+
+  # Areas to sweep. Anything Google understands: city, neighbourhood, street.
+  areas:
+    - תל אביב
+    - רמת גן
+    - גבעתיים
+    - חולון
+    - בת ים
+    - פתח תקווה
+    - ראשון לציון
+    - הרצליה
+    - נתניה
+    - ירושלים
+    - חיפה
+    - באר שבע
+    - אשדוד
+    - רעננה
+    - כפר סבא
+
+  language: he
+  region: il                # ISO 3166-1 country bias
+  max_pages_per_query: 3    # Places text search caps at 3 pages (60 results)
+
+filters:
+  # Only report shops scoring at least this much (see scoring below).
+  min_score: 60
+
+  # Skip permanently closed listings.
+  skip_closed: true
+
+  # Skip listings with no phone number - they are useless as leads.
+  require_phone: true
+
+  # Skip shops already reported in a previous run.
+  skip_already_reported: true
+
+  # Minimum Google reviews. 0 = no filter. Raising this filters out
+  # dead/ghost listings but also brand-new shops.
+  min_review_count: 0
+
+classification:
+  # How to treat a shop whose site is on a DIY builder (Wix etc.) and where
+  # no booking signature was found on the page.
+  #   lead     - report it (aggressive; Wix sites often have no booking)
+  #   demote   - report it but with a lower score
+  #   skip     - never report it
+  treat_builders_as: demote
+
+  # Fetch each shop's homepage to look for a booking widget.
+  # Off  -> classification relies on the website URL only (fast, free).
+  # On   -> far fewer false positives, ~1 HTTP request per shop.
+  probe_websites: true
+  probe_timeout_seconds: 10
+
+  # Use the Google Custom Search API to check whether the shop appears on a
+  # booking platform anywhere on the web (e.g. a Booksy profile page with no
+  # link from Google Maps). Costs one CSE query per shop - see README.
+  web_verify: false
+  web_verify_max_per_run: 100
+
+output:
+  dir: out
+  formats: [csv, json]
+
+# Where to send the results. All channels are optional; leave the env vars
+# unset to disable one. Credentials are read from the environment, never here.
+notify:
+  telegram: false      # needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+  email: false         # needs SMTP_HOST, SMTP_USER, SMTP_PASSWORD, EMAIL_TO
+  max_leads_in_message: 40

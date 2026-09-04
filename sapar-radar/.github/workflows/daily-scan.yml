@@ -1,0 +1,75 @@
+name: Daily lead scan
+
+on:
+  schedule:
+    # 04:00 UTC = 07:00 Israel (winter) / 06:00 (summer, IDT).
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      areas:
+        description: "Comma-separated areas to scan (blank = config default)"
+        required: false
+      limit:
+        description: "Stop after N leads"
+        required: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Restore lead database
+        # Keeps de-duplication working across runs: without this every day
+        # reports the same shops again.
+        uses: actions/cache@v4
+        with:
+          path: out/sapar_radar.db
+          key: sapar-radar-db-${{ github.run_id }}
+          restore-keys: sapar-radar-db-
+
+      - name: Configure
+        run: cp config/config.example.yaml config/config.yaml
+
+      - name: Run scan
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_CSE_API_KEY: ${{ secrets.GOOGLE_CSE_API_KEY }}
+          GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          args=""
+          if [ -n "${{ inputs.areas }}" ]; then
+            IFS=',' read -ra AREAS <<< "${{ inputs.areas }}"
+            for a in "${AREAS[@]}"; do
+              args="$args --area $(printf '%q' "$(echo "$a" | xargs)")"
+            done
+          fi
+          if [ -n "${{ inputs.limit }}" ]; then
+            args="$args --limit ${{ inputs.limit }}"
+          fi
+          eval sapar-radar run --notify $args
+
+      - name: Upload leads
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leads-${{ github.run_number }}
+          path: out/*.csv
+          if-no-files-found: ignore
+          retention-days: 30

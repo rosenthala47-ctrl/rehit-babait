@@ -1,0 +1,224 @@
+# sapar-radar · רדאר ספרים
+
+סוכן שמחפש בגוגל **מספרות וברברשופים שאין להם אתר או אפליקציה לניהול תורים**,
+ומחזיר לך את מספרי הטלפון שלהם — רשימת לידים מוכנה לחיוג.
+
+```
+$ sapar-radar run --area "תל אביב" --notify
+
+נמצאו 3 מספרות ללא מערכת תורים:
+
+  • אין אתר בכלל: 1
+  • רק עמוד סושיאל: 1
+  • אתר בונה-אתרים, בלי זימון תורים: 1
+
+1. מספרת דוד — +97235551234
+   אלנבי 42, תל אביב | ⭐ 4.8 (214) | אין אתר בכלל [100]
+2. Barber King — +972525558877
+   דיזנגוף 110, תל אביב | ⭐ 4.6 (89) | רק עמוד סושיאל [85]
+```
+
+---
+
+## איך זה עובד
+
+```
+   Google Places API            סריקת דף הבית           Google Custom Search
+   "מספרה תל אביב"      →      של כל מספרה       →      "<שם העסק> תור"
+   שם · טלפון · אתר            יש כפתור תור?            יש פרופיל ב-Booksy?
+          │                          │                          │
+          └──────────────────────────┴──────────────────────────┘
+                                     ↓
+                              סיווג וניקוד
+                                     ↓
+                    CSV / JSON / טלגרם / אימייל
+```
+
+שלושה מקורות מידע עצמאיים, כל אחד יכול לפסול ליד:
+
+1. **Google Places API** — מביא שם, כתובת, טלפון, דירוג ו**אתר** בקריאה אחת.
+   אין שדה `websiteUri` ברישום? זה הליד הכי טוב שיש.
+2. **סריקת דף הבית** — אם יש אתר, הסוכן מוריד את דף הבית ומחפש בו כפתורי
+   זימון תור (`קביעת תור`, `Book Now`) או קישורים ל-37 פלטפורמות תורים מוכרות.
+3. **חיפוש בכל גוגל** — גם אם בגוגל מפות אין אתר, אולי יש למספרה פרופיל
+   ב-Booksy או ב-Nello. חיפוש רשת לפי שם העסק תופס את זה.
+
+### הסיווגים והניקוד
+
+| סיווג | ניקוד | מה זה אומר |
+|---|---|---|
+| `no_website` | 100 | אין אתר בכלל — **הליד הכי חם** |
+| `social_only` | 85 | רק אינסטגרם/פייסבוק/וואטסאפ |
+| `builder_no_booking` | 70 | אתר Wix וכדומה, בלי זימון תורים |
+| `website_no_booking` | 60 | אתר אמיתי, אבל אין דרך לקבוע תור אונליין |
+| `unknown` | 30 | יש אתר שלא נסרק — לא מדווח כברירת מחדל |
+| `has_booking` | 0 | **כבר לקוח של מתחרה** — מסונן החוצה |
+
+`min_score: 60` בקונפיג אומר: תדווח רק על ארבע השורות הראשונות.
+
+---
+
+## התקנה
+
+```bash
+git clone https://github.com/rosenthala47-ctrl/sapar-radar.git
+cd sapar-radar
+pip install -e .
+
+cp config/config.example.yaml config/config.yaml
+cp .env.example .env
+```
+
+### הרצה בלי מפתחות (לראות שהכל עובד)
+
+```bash
+sapar-radar run --mock
+```
+
+מריץ את כל הפייפליין על נתוני דמה — בלי קריאות API ובלי עלות.
+
+### הרצה אמיתית
+
+צריך מפתח **Places API (New)**:
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → צור פרויקט
+2. הפעל **Places API (New)** ו-(אופציונלי) **Custom Search API**
+3. `Credentials` → `Create API key` → הגבל אותו ל-Places API
+4. שים אותו ב-`.env` תחת `GOOGLE_MAPS_API_KEY`
+
+```bash
+sapar-radar run                          # כל האזורים מהקונפיג
+sapar-radar run --area "חיפה" --limit 20 # אזור בודד
+sapar-radar run --dry-run                # בלי לכתוב קבצים או מסד נתונים
+sapar-radar run --web-verify --notify    # + אימות רשת + שליחה לטלגרם
+```
+
+---
+
+## הפקודות
+
+| פקודה | מה היא עושה |
+|---|---|
+| `sapar-radar run` | ריצה מלאה: חיפוש → סיווג → דוח |
+| `sapar-radar export` | ייצוא כל הלידים שנאספו אי־פעם ל-CSV |
+| `sapar-radar mark <טלפון> <סטטוס>` | עדכון סטטוס: `contacted`, `interested`, `not_interested`, `customer` |
+| `sapar-radar stats` | כמה לידים נמצאו, לפי סטטוס וסיווג |
+| `sapar-radar platforms` | הצגת כל פלטפורמות התורים שהסוכן מזהה |
+
+דגלים שימושיים ל-`run`: `--mock`, `--dry-run`, `--limit N`, `--min-score N`,
+`--area`, `--query`, `--no-probe`, `--web-verify`, `--notify`, `-v`.
+
+---
+
+## אין דיווח כפול
+
+הסוכן שומר כל מה שראה ב-SQLite (`out/sapar_radar.db`). ריצה שנייה לא תחזיר
+לך שוב את אותן מספרות — רק חדשות. הזיהוי הוא גם לפי `place_id` וגם **לפי
+מספר טלפון**, כי לאותה מספרה יש לא פעם כמה רישומים בגוגל.
+
+```bash
+sapar-radar mark +972501112233 not_interested --notes "ביקש לא להתקשר"
+```
+
+מספר ב-`config/do_not_contact.txt` מסונן החוצה לתמיד.
+
+---
+
+## שליחה אליך
+
+```yaml
+# config/config.yaml
+notify:
+  telegram: true
+  email: true
+```
+
+- **טלגרם** — פתח בוט ב-[@BotFather](https://t.me/BotFather), קח את ה-token,
+  ואת ה-chat id מ-[@userinfobot](https://t.me/userinfobot).
+- **אימייל** — SMTP רגיל. ב-Gmail צריך App Password. ה-CSV מצורף להודעה.
+
+הרץ עם `--notify` כדי לשלוח.
+
+### ריצה אוטומטית כל יום
+
+`.github/workflows/daily-scan.yml` מריץ סריקה כל בוקר ב-07:00 (שעון ישראל),
+שולח לך את הלידים ושומר את ה-CSV כ-artifact. צריך להגדיר ב-
+`Settings → Secrets and variables → Actions`:
+`GOOGLE_MAPS_API_KEY`, ו-`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
+
+---
+
+## כמה זה עולה
+
+| API | חינם | מעבר לזה |
+|---|---|---|
+| Places API (New) — Text Search Pro | $200 קרדיט חודשי (~5,000 קריאות) | ~$0.04 לקריאה (20 תוצאות) |
+| Custom Search JSON | 100 שאילתות ביום | $5 ל-1,000 |
+
+סריקה של 15 ערים × 5 שאילתות × 3 עמודים = 225 קריאות ≈ **$9**, ומחזירה עד
+4,500 רישומים. סריקת הרשת (`--web-verify`) היא זו שמייקרת — היא כבויה
+כברירת מחדל ומוגבלת ב-`web_verify_max_per_run`.
+
+**להוזלה:** הרץ `--no-probe` לסריקה מהירה, והפעל סריקת אתרים רק על
+האזורים שמעניינים אותך.
+
+---
+
+## למה לא פשוט לגרד את google.com
+
+תנאי השימוש של גוגל אוסרים על גירוד תוצאות החיפוש, ומעשית כל סקרייפר נחסם
+אחרי כמה מאות שאילתות ומחזיר CAPTCHA. הסוכן משתמש ב-API הרשמיים של גוגל,
+שנותנים את אותו מידע בצורה יציבה וחוקית.
+
+רוצה ספק אחר (SerpAPI, ScraperAPI)? ממש
+`DiscoveryProvider` או `WebSearchProvider` ב-`src/sapar_radar/providers/base.py`
+— שאר המערכת לא משתנה.
+
+---
+
+## דיוק הזיהוי
+
+הקובץ `config/booking_platforms.yaml` הוא הכי חשוב במערכת. הוא מגיע עם 37
+פלטפורמות — ישראליות (Nello, Arbox, QuickTor, Plannie, Calmark, Pink, זמן טוב,
+Simple Tor) וגלובליות (Booksy, Fresha, Squire, Zenoti, Setmore, Calendly ועוד).
+
+**כל מתחרה שאתה פוגש בשטח — תוסיף לקובץ.** זה מה שמונע בזבוז זמן על
+מספרות שכבר יש להן מערכת.
+
+---
+
+## פיתוח
+
+```bash
+pip install -e ".[dev]"
+pytest -q          # 53 בדיקות, בלי רשת
+```
+
+```
+src/sapar_radar/
+├── cli.py            ממשק שורת הפקודה
+├── pipeline.py       לולאת הריצה: חיפוש → סיווג → סינון
+├── classify.py       ההחלטה: יש מערכת תורים או אין
+├── models.py         Place, Lead, נרמול טלפונים
+├── store.py          SQLite: דה-דופליקציה ומעקב סטטוס
+├── website_probe.py  הורדת דף הבית של המספרה
+├── export.py         CSV / JSON / סיכום טקסט
+├── notify.py         טלגרם / אימייל
+└── providers/        Google Places, Google CSE, mock
+```
+
+---
+
+## שימוש אחראי
+
+הסוכן אוסף **פרטי קשר עסקיים פומביים** מרישומי Google Business — בדיוק
+המידע שבעל העסק פרסם כדי שיפנו אליו. עדיין, קרא את [COMPLIANCE.md](COMPLIANCE.md)
+לפני שאתה מתחיל לחייג: יש הבדל משפטי בין שיחת טלפון לבין דיוור המוני,
+וחוק הספאם הישראלי מתייחס לשני אלה אחרת.
+
+כלל אצבע: **תתקשר, אל תפציץ בהודעות.** ומספר שביקש להסיר — נכנס מיד
+ל-`do_not_contact.txt`.
+
+## רישיון
+
+MIT

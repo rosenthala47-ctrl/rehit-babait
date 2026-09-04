@@ -1,0 +1,6 @@
+# One entry per line: a phone number (any format) or a Google place_id.
+# Anything listed here is filtered out of every report, forever.
+# Add a shop here the moment it asks not to be contacted again.
+#
+# +972-3-1234567
+# ChIJexampleplaceid
