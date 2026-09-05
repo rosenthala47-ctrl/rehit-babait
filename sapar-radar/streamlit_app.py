@@ -42,6 +42,20 @@ def _status_label(status: str) -> str:
     he, hint = STATUS_INFO_HE.get(status, (status, ""))
     return f"{he} - {hint}" if hint else he
 
+
+#: Why a discovered shop did not become a lead - matches Pipeline's skip reasons.
+SKIP_LABELS_HE = {
+    "duplicate_place_id": "כפילות (אותה מספרה נמצאה פעמיים בחיפוש)",
+    "duplicate_phone": "כפילות (אותו טלפון כבר נמצא)",
+    "closed": "העסק סגור",
+    "no_phone": "אין מספר טלפון",
+    "do_not_contact": "ברשימת 'לא ליצור קשר'",
+    "too_few_reviews": "מעט מדי ביקורות",
+    "already_reported": "כבר הופיע בחיפוש קודם",
+    "has_booking": "כבר יש מערכת תורים",
+    "below_min_score": "ציון נמוך מהסף שהוגדר",
+}
+
 st.set_page_config(page_title="רדאר מספרות", page_icon="📞", layout="centered")
 
 try:
@@ -137,6 +151,7 @@ with tab_search:
 
                 st.session_state.leads = leads
                 st.session_state.status_overrides = {}
+                st.session_state.last_stats = pipeline.stats
 
                 if leads:
                     st.success(f"נמצאו {len(leads)} לידים חדשים!")
@@ -145,6 +160,17 @@ with tab_search:
                         "לא נמצאו לידים חדשים. נסה עיר אחרת, הורד את הציון "
                         "המינימלי, או בטל את 'דלג על מספרות שכבר הופיעו'."
                     )
+
+    stats = st.session_state.get("last_stats")
+    if stats is not None:
+        with st.expander("פרטים טכניים על החיפוש האחרון"):
+            st.write(f"נמצאו בסך הכל: {stats.discovered}")
+            st.write(f"מתוכן ייחודיות (לא כפולות): {stats.unique}")
+            st.write(f"הפכו לליד: {stats.leads}")
+            if stats.skipped:
+                st.write("למה השאר לא הפכו לליד:")
+                for reason, count in sorted(stats.skipped.items(), key=lambda kv: -kv[1]):
+                    st.write(f"  • {SKIP_LABELS_HE.get(reason, reason)}: {count}")
 
     leads = st.session_state.leads
     if leads:

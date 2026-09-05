@@ -14,6 +14,7 @@ class FakeOSMClient:
         self.geocode_payload = geocode_payload
         self.overpass_payload = overpass_payload
         self.calls: list[str] = []
+        self.last_overpass_query: str | None = None
 
     def get(self, url, params=None):
         self.calls.append("geocode")
@@ -23,6 +24,7 @@ class FakeOSMClient:
 
     def post(self, url, data=None):
         self.calls.append("overpass")
+        self.last_overpass_query = (data or {}).get("data")
         return httpx.Response(
             200, json=self.overpass_payload, request=httpx.Request("POST", url)
         )
@@ -131,3 +133,30 @@ def test_unknown_area_yields_nothing():
     provider, _ = _provider(geocode=[], overpass={"elements": []})
     places = list(provider.search("מספרה", "מקום שלא קיים"))
     assert places == []
+
+
+def test_query_matches_hairdresser_by_regex_not_exact_equality():
+    # A plain `="hairdresser"` filter silently misses compound OSM tags like
+    # "hairdresser;beauty", which real-world mappers use often. Overpass's
+    # `~` regex operator catches those too - assert we actually use it.
+    provider, client = _provider()
+    list(provider.search("מספרה", "תל אביב"))
+    assert '["shop"~"hairdresser"]' in client.last_overpass_query
+    assert '="hairdresser"' not in client.last_overpass_query
+
+
+def test_compound_shop_tag_is_still_picked_up():
+    overpass = {
+        "elements": [
+            {
+                "type": "node",
+                "id": 555,
+                "lat": 32.08,
+                "lon": 34.78,
+                "tags": {"shop": "hairdresser;beauty", "name": "סטודיו משולב"},
+            }
+        ]
+    }
+    provider, _ = _provider(overpass=overpass)
+    places = list(provider.search("מספרה", "תל אביב"))
+    assert {p.name for p in places} == {"סטודיו משולב"}

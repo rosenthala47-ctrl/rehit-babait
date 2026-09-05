@@ -75,11 +75,13 @@ class OSMProvider:
     def _overpass(self, bbox: tuple[float, float, float, float]) -> list[dict]:
         south, west, north, east = bbox
         box = f"{south},{west},{north},{east}"
+        # Regex, not "=", because OSM allows compound tags like
+        # shop=hairdresser;beauty - an exact match would silently miss those.
         ql = (
             "[out:json][timeout:25];\n"
             "(\n"
-            f'  node["shop"="hairdresser"]({box});\n'
-            f'  way["shop"="hairdresser"]({box});\n'
+            f'  node["shop"~"hairdresser"]({box});\n'
+            f'  way["shop"~"hairdresser"]({box});\n'
             ");\n"
             "out center tags;"
         )
