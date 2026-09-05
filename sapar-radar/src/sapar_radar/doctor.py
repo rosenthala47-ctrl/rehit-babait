@@ -61,7 +61,8 @@ def check_api_key() -> Check:
         return Check(
             FAIL,
             "אין מפתח GOOGLE_MAPS_API_KEY",
-            "בלי מפתח אפשר להריץ רק: sapar-radar run --mock",
+            "אפשר להריץ בלי מפתח: sapar-radar run --mock (נתוני דמו) "
+            "או sapar-radar run --osm (חיפוש אמיתי ב-OpenStreetMap, בלי כרטיס אשראי).",
             "צור מפתח ב-console.cloud.google.com ושים אותו בקובץ .env",
         )
     if len(key) < 30:
@@ -230,7 +231,8 @@ def run_doctor(config: Config, skip_live: bool = False) -> int:
     if failures:
         word = "בעיה אחת שחוסמת" if len(failures) == 1 else f"{len(failures)} בעיות שחוסמות"
         print(f"\n{word} ריצה אמיתית.")
-        print("בינתיים אפשר תמיד להריץ:  sapar-radar run --mock")
+        print("בינתיים אפשר תמיד להריץ:  sapar-radar run --mock  (נתוני דמו)")
+        print("או חיפוש אמיתי בלי מפתח:  sapar-radar run --osm   (OpenStreetMap)")
         return 1
     print("\nהכל תקין. נסה:  sapar-radar run --area \"תל אביב\" --limit 10")
     return 0

@@ -82,7 +82,21 @@ sapar-radar run --mock
 
 מריץ את כל הפייפליין על נתוני דמה — בלי קריאות API ובלי עלות.
 
-### הרצה אמיתית
+### הרצה אמיתית בלי כרטיס אשראי (OpenStreetMap)
+
+Google Cloud דורש חשבון חיוב (עם כרטיס אשראי) גם לשימוש חינמי לגמרי. מי
+שמעדיף לא לתת פרטי כרטיס בכלל יכול להשתמש ב-OpenStreetMap במקום —
+**חינמי לגמרי, בלי הרשמה, בלי מפתח**:
+
+```bash
+sapar-radar run --osm --area "תל אביב" --limit 10
+```
+
+התוצאות באות ממאגר המפות הפתוח (Nominatim + Overpass) ולא מגוגל, כך
+שהכיסוי של עסקים קטנים בישראל פחות מלא — פחות מספרות יימצאו, ולחלקן
+יחסר טלפון או כתובת. לכיסוי מלא יותר, המשך לחלק הבא.
+
+### הרצה אמיתית מול גוגל
 
 צריך מפתח **Places API (New)**:
 
@@ -111,8 +125,8 @@ sapar-radar run --web-verify --notify    # + אימות רשת + שליחה לט
 | `sapar-radar stats` | כמה לידים נמצאו, לפי סטטוס וסיווג |
 | `sapar-radar platforms` | הצגת כל פלטפורמות התורים שהסוכן מזהה |
 
-דגלים שימושיים ל-`run`: `--mock`, `--dry-run`, `--limit N`, `--min-score N`,
-`--area`, `--query`, `--no-probe`, `--web-verify`, `--notify`, `-v`.
+דגלים שימושיים ל-`run`: `--mock`, `--osm`, `--dry-run`, `--limit N`,
+`--min-score N`, `--area`, `--query`, `--no-probe`, `--web-verify`, `--notify`, `-v`.
 
 ---
 
@@ -218,7 +232,7 @@ src/sapar_radar/
 ├── website_probe.py  הורדת דף הבית של המספרה
 ├── export.py         CSV / JSON / סיכום טקסט
 ├── notify.py         טלגרם / אימייל
-└── providers/        Google Places, Google CSE, mock
+└── providers/        Google Places, Google CSE, OpenStreetMap, mock
 ```
 
 ---

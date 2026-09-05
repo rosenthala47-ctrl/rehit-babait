@@ -14,7 +14,7 @@ from .doctor import run_doctor
 from .export import format_summary, write_csv, write_json
 from .models import VERDICT_LABELS_HE
 from .pipeline import Pipeline
-from .providers import GoogleCSEProvider, GooglePlacesProvider, MockProvider
+from .providers import GoogleCSEProvider, GooglePlacesProvider, MockProvider, OSMProvider
 from .providers.mock import MockWebSearch
 from .store import CONTACT_STATUSES, Store
 from .website_probe import WebsiteProbe
@@ -69,6 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--mock", action="store_true",
                      help="use offline fixtures - no API key needed")
+    run.add_argument("--osm", action="store_true",
+                     help="use OpenStreetMap - free, no API key, no credit card")
     run.add_argument("--area", action="append",
                      help="override config areas (repeatable)")
     run.add_argument("--query", action="append",
@@ -128,6 +130,9 @@ def cmd_run(args: argparse.Namespace, config: Config) -> int:
         discovery = MockProvider()
         web_search = MockWebSearch()
         log.info("running in MOCK mode - no API calls, fixture data only")
+    elif args.osm:
+        discovery = OSMProvider()
+        log.info("running with OpenStreetMap - no API key, no credit card")
     else:
         discovery = GooglePlacesProvider(
             api_key=require_env("GOOGLE_MAPS_API_KEY"),
