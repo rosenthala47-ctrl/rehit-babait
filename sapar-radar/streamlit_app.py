@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from sapar_radar.config import Config, ConfigError  # noqa: E402
 from sapar_radar.export import COLUMNS  # noqa: E402
+from sapar_radar.github_store import GitHubStoreAdapter, GitHubStoreError  # noqa: E402
 from sapar_radar.models import VERDICT_LABELS_HE  # noqa: E402
 from sapar_radar.pipeline import Pipeline  # noqa: E402
 from sapar_radar.providers import GooglePlacesProvider, OSMProvider  # noqa: E402
@@ -26,6 +27,13 @@ from sapar_radar.store import CONTACT_STATUSES, Store  # noqa: E402
 from sapar_radar.website_probe import WebsiteProbe  # noqa: E402
 
 DB_PATH = Path(__file__).resolve().parent / "out" / "webapp.db"
+
+#: Default GitHub Contents API target for the durable leads file - override
+#: any of these from Streamlit secrets if the app moves to a different repo
+#: or branch. Local SQLite (DB_PATH) is used only when GITHUB_TOKEN is unset.
+DEFAULT_GITHUB_REPO = "rosenthala47-ctrl/rehit-babait"
+DEFAULT_GITHUB_BRANCH = "claude/book-phone-search-bot-7xrbjq"
+DEFAULT_GITHUB_LEADS_PATH = "sapar-radar/data/leads.json"
 
 #: Hebrew labels + usage hint for each contact_status value (kept in English
 #: in the database so the CLI's `mark` command stays compatible).
@@ -61,10 +69,121 @@ st.set_page_config(page_title="רדאר מספרות", page_icon="📞", layout=
 
 try:
     _google_key = st.secrets.get("GOOGLE_MAPS_API_KEY", "")
+    _github_token = st.secrets.get("GITHUB_TOKEN", "")
+    _github_repo = st.secrets.get("GITHUB_REPO", DEFAULT_GITHUB_REPO)
+    _github_branch = st.secrets.get("GITHUB_BRANCH", DEFAULT_GITHUB_BRANCH)
+    _github_leads_path = st.secrets.get("GITHUB_LEADS_PATH", DEFAULT_GITHUB_LEADS_PATH)
 except Exception:
     _google_key = ""
+    _github_token = ""
+    _github_repo = DEFAULT_GITHUB_REPO
+    _github_branch = DEFAULT_GITHUB_BRANCH
+    _github_leads_path = DEFAULT_GITHUB_LEADS_PATH
 if _google_key:
     os.environ.setdefault("GOOGLE_MAPS_API_KEY", _google_key)
+
+
+def _open_store():
+    """A store for the current interaction (one search run, or one mark
+    action) - always talks to the source of truth directly, no caching,
+    since a write needs to land immediately."""
+    if _github_token:
+        return GitHubStoreAdapter(
+            token=_github_token, repo=_github_repo,
+            path=_github_leads_path, branch=_github_branch,
+        )
+    return Store(DB_PATH)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _history_snapshot(token: str, repo: str, path: str, branch: str):
+    """Read-only, short-TTL cache for the History tab, so every widget
+    interaction elsewhere on the page doesn't each trigger a GitHub API
+    call - only a real search or mark action needs the absolute latest."""
+    adapter = GitHubStoreAdapter(token=token, repo=repo, path=path, branch=branch)
+    try:
+        return adapter.stats(), adapter.all_records(limit=500)
+    finally:
+        adapter.close()
+
+
+def _run_search(
+    areas: list[str], limit: int, min_score: int, probe: bool,
+    skip_seen: bool, uses_google: bool,
+) -> None:
+    """Runs one discovery pass and renders the outcome. Guard clauses
+    throughout: a failure at any stage stops here rather than falling
+    through to code that assumes the previous step succeeded."""
+    try:
+        config = Config.load()
+    except ConfigError as exc:
+        st.error(f"שגיאת הגדרות: {exc}")
+        return
+
+    config.raw.setdefault("search", {})["areas"] = areas
+    config.raw.setdefault("filters", {})["min_score"] = min_score
+    config.raw.setdefault("filters", {})["skip_already_reported"] = skip_seen
+    config.raw.setdefault("classification", {})["probe_websites"] = probe
+
+    discovery = GooglePlacesProvider(api_key=_google_key) if uses_google else OSMProvider()
+    website_probe = WebsiteProbe() if probe else None
+
+    try:
+        store = _open_store()
+    except GitHubStoreError as exc:
+        st.error(
+            f"לא הצלחתי להתחבר ל-GitHub לשמירת ההיסטוריה: {exc}\n\n"
+            "בדוק את GITHUB_TOKEN / GITHUB_REPO / GITHUB_BRANCH בהגדרות (Secrets)."
+        )
+        if website_probe:
+            website_probe.close()
+        if hasattr(discovery, "close"):
+            discovery.close()
+        return
+
+    pipeline = Pipeline(config, discovery, None, store, website_probe)
+    leads = None
+    with st.spinner("מחפש… זה יכול לקחת דקה."):
+        run_id = store.start_run(discovery.name)
+        try:
+            leads = pipeline.run(limit=limit)
+        except OverpassUnavailable:
+            st.error(
+                "שירות OpenStreetMap עמוס כרגע ולא הגיב בזמן. זה "
+                "קורה מדי פעם בשירות החינמי - נסה שוב בעוד דקה, "
+                "או נסה עיר עם שטח קטן יותר."
+            )
+        except Exception as exc:
+            st.error(f"קרתה שגיאה בלתי צפויה בזמן החיפוש: {exc}")
+        finally:
+            if website_probe:
+                website_probe.close()
+            if hasattr(discovery, "close"):
+                discovery.close()
+            if leads is not None:
+                try:
+                    store.finish_run(run_id, pipeline.stats.discovered, pipeline.stats.leads)
+                except GitHubStoreError as exc:
+                    st.error(f"החיפוש הצליח, אבל השמירה ל-GitHub נכשלה: {exc}")
+                else:
+                    if _github_token:
+                        _history_snapshot.clear()
+            store.close()
+
+    if leads is None:
+        return
+
+    st.session_state.leads = leads
+    st.session_state.status_overrides = {}
+    st.session_state.last_stats = pipeline.stats
+
+    if leads:
+        st.success(f"נמצאו {len(leads)} לידים חדשים!")
+    else:
+        st.info(
+            "לא נמצאו לידים חדשים. נסה עיר אחרת, הורד את הציון "
+            "המינימלי, או בטל את 'דלג על מספרות שכבר הופיעו'."
+        )
 
 st.markdown(
     """
@@ -77,6 +196,13 @@ st.markdown(
 
 st.title("📞 רדאר מספרות")
 st.caption("מוצא מספרות ללא אתר או מערכת תורים, ומחזיר טלפונים ליצירת קשר.")
+if _github_token:
+    st.caption("💾 שמירה: קבועה ב-GitHub - הלידים נשארים גם אחרי עדכון האתר.")
+else:
+    st.caption(
+        "⚠️ שמירה: זמנית בלבד - הלידים יימחקו בעדכון הבא של האתר. "
+        "להפעיל שמירה קבועה, ראה INSTALL.md."
+    )
 
 if "leads" not in st.session_state:
     st.session_state.leads = []
@@ -117,63 +243,7 @@ with tab_search:
         if not areas:
             st.error("צריך לפחות עיר אחת.")
         else:
-            try:
-                config = Config.load()
-            except ConfigError as exc:
-                st.error(f"שגיאת הגדרות: {exc}")
-                config = None
-
-            if config is not None:
-                config.raw.setdefault("search", {})["areas"] = areas
-                config.raw.setdefault("filters", {})["min_score"] = int(min_score)
-                config.raw.setdefault("filters", {})["skip_already_reported"] = skip_seen
-                config.raw.setdefault("classification", {})["probe_websites"] = probe
-
-                discovery = (
-                    GooglePlacesProvider(api_key=_google_key)
-                    if uses_google
-                    else OSMProvider()
-                )
-                website_probe = WebsiteProbe() if probe else None
-                store = Store(DB_PATH)
-                pipeline = Pipeline(config, discovery, None, store, website_probe)
-
-                leads = None
-                with st.spinner("מחפש… זה יכול לקחת דקה."):
-                    run_id = store.start_run(discovery.name)
-                    try:
-                        leads = pipeline.run(limit=int(limit))
-                    except OverpassUnavailable:
-                        st.error(
-                            "שירות OpenStreetMap עמוס כרגע ולא הגיב בזמן. זה "
-                            "קורה מדי פעם בשירות החינמי - נסה שוב בעוד דקה, "
-                            "או נסה עיר עם שטח קטן יותר."
-                        )
-                    except Exception as exc:
-                        st.error(f"קרתה שגיאה בלתי צפויה בזמן החיפוש: {exc}")
-                    finally:
-                        if website_probe:
-                            website_probe.close()
-                        if hasattr(discovery, "close"):
-                            discovery.close()
-                        if leads is not None:
-                            store.finish_run(
-                                run_id, pipeline.stats.discovered, pipeline.stats.leads
-                            )
-                        store.close()
-
-                if leads is not None:
-                    st.session_state.leads = leads
-                    st.session_state.status_overrides = {}
-                    st.session_state.last_stats = pipeline.stats
-
-                    if leads:
-                        st.success(f"נמצאו {len(leads)} לידים חדשים!")
-                    else:
-                        st.info(
-                            "לא נמצאו לידים חדשים. נסה עיר אחרת, הורד את הציון "
-                            "המינימלי, או בטל את 'דלג על מספרות שכבר הופיעו'."
-                        )
+            _run_search(areas, int(limit), int(min_score), probe, skip_seen, uses_google)
 
     stats = st.session_state.get("last_stats")
     if stats is not None:
@@ -236,19 +306,36 @@ with tab_search:
                     label_visibility="collapsed",
                 )
                 if mcol2.button("עדכן", key=f"update_{p.place_id}"):
-                    store = Store(DB_PATH)
-                    updated = store.mark(phone or p.place_id, new_status)
-                    store.close()
-                    st.session_state.status_overrides[p.place_id] = new_status
-                    if updated:
-                        st.toast(f"עודכן ל: {STATUS_INFO_HE.get(new_status, (new_status,))[0]}")
+                    try:
+                        store = _open_store()
+                        try:
+                            updated = store.mark(phone or p.place_id, new_status)
+                        finally:
+                            store.close()
+                    except GitHubStoreError as exc:
+                        st.error(f"לא הצלחתי לעדכן ב-GitHub: {exc}")
+                    else:
+                        st.session_state.status_overrides[p.place_id] = new_status
+                        if updated:
+                            if _github_token:
+                                _history_snapshot.clear()
+                            st.toast(f"עודכן ל: {STATUS_INFO_HE.get(new_status, (new_status,))[0]}")
 
 # --------------------------------------------------------------- history --
 with tab_history:
-    store = Store(DB_PATH)
-    stats = store.stats()
-    rows = store.reported_rows(limit=500)
-    store.close()
+    if _github_token:
+        try:
+            stats, rows = _history_snapshot(
+                _github_token, _github_repo, _github_leads_path, _github_branch
+            )
+        except GitHubStoreError as exc:
+            st.error(f"לא הצלחתי לקרוא את ההיסטוריה מ-GitHub: {exc}")
+            stats, rows = {}, []
+    else:
+        store = Store(DB_PATH)
+        stats = store.stats()
+        rows = [dict(r) for r in store.reported_rows(limit=500)]
+        store.close()
 
     if not rows:
         st.info("עדיין לא נצברו לידים. חפש קודם בלשונית 'חיפוש חדש'.")
