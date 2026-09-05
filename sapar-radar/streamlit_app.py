@@ -26,6 +26,22 @@ from sapar_radar.website_probe import WebsiteProbe  # noqa: E402
 
 DB_PATH = Path(__file__).resolve().parent / "out" / "webapp.db"
 
+#: Hebrew labels + usage hint for each contact_status value (kept in English
+#: in the database so the CLI's `mark` command stays compatible).
+STATUS_INFO_HE = {
+    "new": ("חדש", "עוד לא טיפלת בכלל"),
+    "reported": ("דווח", "ברירת המחדל - הופיע ברשימה, עוד לא התקשרת"),
+    "contacted": ("יצרת קשר", "התקשרת אליו"),
+    "interested": ("מעוניין", "הביע עניין בשירות שלך"),
+    "not_interested": ("לא מעוניין", "סירב, או ביקש לא להתקשר שוב"),
+    "customer": ("לקוח", "סגרת איתו עסקה"),
+}
+
+
+def _status_label(status: str) -> str:
+    he, hint = STATUS_INFO_HE.get(status, (status, ""))
+    return f"{he} - {hint}" if hint else he
+
 st.set_page_config(page_title="רדאר מספרות", page_icon="📞", layout="centered")
 
 try:
@@ -135,6 +151,11 @@ with tab_search:
         st.divider()
         st.subheader(f"תוצאות ({len(leads)})")
 
+        with st.expander("מתי משתמשים בכל סטטוס?"):
+            for status in CONTACT_STATUSES:
+                he, hint = STATUS_INFO_HE.get(status, (status, ""))
+                st.markdown(f"**{he}** — {hint}")
+
         buffer = io.StringIO()
         import csv as csv_module
 
@@ -170,6 +191,7 @@ with tab_search:
                     "סטטוס יצירת קשר",
                     CONTACT_STATUSES,
                     index=CONTACT_STATUSES.index(current),
+                    format_func=_status_label,
                     key=f"status_{p.place_id}",
                     label_visibility="collapsed",
                 )
@@ -179,7 +201,7 @@ with tab_search:
                     store.close()
                     st.session_state.status_overrides[p.place_id] = new_status
                     if updated:
-                        st.toast(f"עודכן ל-{new_status}")
+                        st.toast(f"עודכן ל: {STATUS_INFO_HE.get(new_status, (new_status,))[0]}")
 
 # --------------------------------------------------------------- history --
 with tab_history:
@@ -194,7 +216,8 @@ with tab_history:
         st.subheader(f"סה\"כ {stats.get('total', 0)} לידים במאגר")
         cols = st.columns(4)
         for i, status in enumerate(CONTACT_STATUSES):
-            cols[i % 4].metric(status, stats.get(status, 0))
+            label = STATUS_INFO_HE.get(status, (status,))[0]
+            cols[i % 4].metric(label, stats.get(status, 0))
 
         st.divider()
         table = [
@@ -202,7 +225,7 @@ with tab_history:
                 "שם": r["name"],
                 "טלפון": r["phone_e164"],
                 "עיר": r["city"],
-                "סטטוס": r["contact_status"],
+                "סטטוס": STATUS_INFO_HE.get(r["contact_status"], (r["contact_status"],))[0],
                 "ציון": r["score"],
                 "סיווג": VERDICT_LABELS_HE.get(r["verdict"], r["verdict"]),
             }
