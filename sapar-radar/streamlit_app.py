@@ -21,6 +21,7 @@ from sapar_radar.export import COLUMNS  # noqa: E402
 from sapar_radar.models import VERDICT_LABELS_HE  # noqa: E402
 from sapar_radar.pipeline import Pipeline  # noqa: E402
 from sapar_radar.providers import GooglePlacesProvider, OSMProvider  # noqa: E402
+from sapar_radar.providers.osm import OverpassUnavailable  # noqa: E402
 from sapar_radar.store import CONTACT_STATUSES, Store  # noqa: E402
 from sapar_radar.website_probe import WebsiteProbe  # noqa: E402
 
@@ -111,7 +112,7 @@ with tab_search:
     )
     skip_seen = st.checkbox("דלג על מספרות שכבר הופיעו בחיפוש קודם", value=True)
 
-    if st.button("🔍 חפש עכשיו", type="primary", use_container_width=True):
+    if st.button("🔍 חפש עכשיו", type="primary", width='stretch'):
         areas = [a.strip() for a in area_input.split(",") if a.strip()]
         if not areas:
             st.error("צריך לפחות עיר אחת.")
@@ -137,29 +138,42 @@ with tab_search:
                 store = Store(DB_PATH)
                 pipeline = Pipeline(config, discovery, None, store, website_probe)
 
+                leads = None
                 with st.spinner("מחפש… זה יכול לקחת דקה."):
                     run_id = store.start_run(discovery.name)
                     try:
                         leads = pipeline.run(limit=int(limit))
+                    except OverpassUnavailable:
+                        st.error(
+                            "שירות OpenStreetMap עמוס כרגע ולא הגיב בזמן. זה "
+                            "קורה מדי פעם בשירות החינמי - נסה שוב בעוד דקה, "
+                            "או נסה עיר עם שטח קטן יותר."
+                        )
+                    except Exception as exc:
+                        st.error(f"קרתה שגיאה בלתי צפויה בזמן החיפוש: {exc}")
                     finally:
                         if website_probe:
                             website_probe.close()
                         if hasattr(discovery, "close"):
                             discovery.close()
-                    store.finish_run(run_id, pipeline.stats.discovered, pipeline.stats.leads)
-                    store.close()
+                        if leads is not None:
+                            store.finish_run(
+                                run_id, pipeline.stats.discovered, pipeline.stats.leads
+                            )
+                        store.close()
 
-                st.session_state.leads = leads
-                st.session_state.status_overrides = {}
-                st.session_state.last_stats = pipeline.stats
+                if leads is not None:
+                    st.session_state.leads = leads
+                    st.session_state.status_overrides = {}
+                    st.session_state.last_stats = pipeline.stats
 
-                if leads:
-                    st.success(f"נמצאו {len(leads)} לידים חדשים!")
-                else:
-                    st.info(
-                        "לא נמצאו לידים חדשים. נסה עיר אחרת, הורד את הציון "
-                        "המינימלי, או בטל את 'דלג על מספרות שכבר הופיעו'."
-                    )
+                    if leads:
+                        st.success(f"נמצאו {len(leads)} לידים חדשים!")
+                    else:
+                        st.info(
+                            "לא נמצאו לידים חדשים. נסה עיר אחרת, הורד את הציון "
+                            "המינימלי, או בטל את 'דלג על מספרות שכבר הופיעו'."
+                        )
 
     stats = st.session_state.get("last_stats")
     if stats is not None:
@@ -194,7 +208,7 @@ with tab_search:
             data=buffer.getvalue().encode("utf-8-sig"),
             file_name="leads.csv",
             mime="text/csv",
-            use_container_width=True,
+            width='stretch',
         )
 
         for lead in leads:
@@ -257,4 +271,4 @@ with tab_history:
             }
             for r in rows
         ]
-        st.dataframe(table, use_container_width=True, hide_index=True)
+        st.dataframe(table, width='stretch', hide_index=True)

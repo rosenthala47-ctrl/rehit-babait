@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
-from sapar_radar.providers.osm import OSMProvider
+from sapar_radar.providers import osm as osm_module
+from sapar_radar.providers.osm import OSMProvider, OverpassUnavailable
+
+
+@pytest.fixture(autouse=True)
+def _no_real_sleeps(monkeypatch):
+    # The retry backoff (10s) would otherwise really pause the test suite.
+    monkeypatch.setattr(osm_module.time, "sleep", lambda seconds: None)
 
 
 class FakeOSMClient:
@@ -143,6 +151,74 @@ def test_query_matches_hairdresser_by_regex_not_exact_equality():
     list(provider.search("מספרה", "תל אביב"))
     assert '["shop"~"hairdresser"]' in client.last_overpass_query
     assert '="hairdresser"' not in client.last_overpass_query
+
+
+class FlakyOverpassClient:
+    """Replays a fixed sequence of POST outcomes - a status code/payload
+    pair, or an exception instance to raise - one per call, in order."""
+
+    def __init__(self, geocode_payload, post_outcomes):
+        self.geocode_payload = geocode_payload
+        self._post_outcomes = list(post_outcomes)
+        self.post_calls = 0
+
+    def get(self, url, params=None):
+        return httpx.Response(
+            200, json=self.geocode_payload, request=httpx.Request("GET", url)
+        )
+
+    def post(self, url, data=None):
+        self.post_calls += 1
+        outcome = self._post_outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        status, payload = outcome
+        return httpx.Response(status, json=payload, request=httpx.Request("POST", url))
+
+    def close(self) -> None:
+        pass
+
+
+def test_retries_once_on_gateway_timeout_then_succeeds():
+    client = FlakyOverpassClient(GEOCODE_OK, [(504, {}), (200, OVERPASS_HAIRDRESSERS)])
+    provider = OSMProvider(client=client, nominatim_pause_seconds=0)
+
+    places = list(provider.search("מספרה", "תל אביב"))
+
+    assert client.post_calls == 2
+    assert len(places) == 3
+
+
+def test_raises_overpass_unavailable_when_retry_also_fails():
+    client = FlakyOverpassClient(GEOCODE_OK, [(503, {}), (503, {})])
+    provider = OSMProvider(client=client, nominatim_pause_seconds=0)
+
+    with pytest.raises(OverpassUnavailable):
+        list(provider.search("מספרה", "תל אביב"))
+
+
+def test_network_error_talking_to_overpass_raises_overpass_unavailable():
+    client = FlakyOverpassClient(GEOCODE_OK, [httpx.ConnectError("boom")])
+    provider = OSMProvider(client=client, nominatim_pause_seconds=0)
+
+    with pytest.raises(OverpassUnavailable):
+        list(provider.search("מספרה", "תל אביב"))
+
+
+def test_network_error_talking_to_nominatim_yields_no_results_not_a_crash():
+    class BoomingGeocodeClient:
+        def get(self, url, params=None):
+            raise httpx.ConnectError("boom")
+
+        def post(self, url, data=None):
+            raise AssertionError("must not query overpass if geocoding failed")
+
+        def close(self) -> None:
+            pass
+
+    provider = OSMProvider(client=BoomingGeocodeClient(), nominatim_pause_seconds=0)
+    places = list(provider.search("מספרה", "תל אביב"))
+    assert places == []
 
 
 def test_compound_shop_tag_is_still_picked_up():

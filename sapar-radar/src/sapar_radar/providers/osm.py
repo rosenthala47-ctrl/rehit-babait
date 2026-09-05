@@ -25,6 +25,16 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 USER_AGENT = "sapar-radar (https://github.com/rosenthala47-ctrl/rehit-babait)"
 
 
+class OverpassUnavailable(RuntimeError):
+    """The free, shared Overpass instance is overloaded or unreachable.
+
+    A distinct type from a plain RuntimeError so callers (the CLI, the web
+    app) can catch this specifically and tell the user "try again shortly"
+    instead of showing a raw traceback for what is just the public server
+    being busy - a routine, temporary condition on a free shared service.
+    """
+
+
 class OSMProvider:
     """Discovery via OpenStreetMap - free, keyless, no billing account."""
 
@@ -61,8 +71,13 @@ class OSMProvider:
 
     def _geocode(self, area: str) -> tuple[float, float, float, float] | None:
         params = {"format": "json", "q": area, "countrycodes": "il", "limit": 1}
-        response = self._client.get(NOMINATIM_URL, params=params)
-        time.sleep(self.nominatim_pause_seconds)  # usage policy: max 1 req/sec
+        try:
+            response = self._client.get(NOMINATIM_URL, params=params)
+        except httpx.HTTPError as exc:
+            log.warning("nominatim request failed: %s", exc)
+            return None
+        finally:
+            time.sleep(self.nominatim_pause_seconds)  # usage policy: max 1 req/sec
         if response.status_code >= 400:
             log.warning("nominatim %s: %s", response.status_code, response.text[:200])
             return None
@@ -85,11 +100,26 @@ class OSMProvider:
             ");\n"
             "out center tags;"
         )
-        response = self._client.post(OVERPASS_URL, data={"data": ql})
-        if response.status_code == 429:
-            log.warning("overpass rate limited; backing off 10s")
-            time.sleep(10)
+        # 429 (rate limited) and 502/503/504 (the shared free instance is
+        # overloaded) are all routine on this server - one retry after a
+        # pause clears most of them.
+        try:
             response = self._client.post(OVERPASS_URL, data={"data": ql})
+            if response.status_code in (429, 502, 503, 504):
+                log.warning(
+                    "overpass %s; backing off 10s and retrying once",
+                    response.status_code,
+                )
+                time.sleep(10)
+                response = self._client.post(OVERPASS_URL, data={"data": ql})
+        except httpx.HTTPError as exc:
+            raise OverpassUnavailable(f"Overpass API unreachable: {exc}") from exc
+
+        if response.status_code in (429, 502, 503, 504):
+            raise OverpassUnavailable(
+                f"Overpass API is overloaded (HTTP {response.status_code}) - "
+                "this is the free shared server being busy, try again shortly"
+            )
         if response.status_code >= 400:
             raise RuntimeError(
                 f"Overpass API {response.status_code}: {response.text[:400]}"

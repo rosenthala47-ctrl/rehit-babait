@@ -4,7 +4,7 @@ from .base import DiscoveryProvider, WebSearchProvider
 from .google_places import GooglePlacesProvider
 from .google_cse import GoogleCSEProvider
 from .mock import MockProvider
-from .osm import OSMProvider
+from .osm import OSMProvider, OverpassUnavailable
 
 __all__ = [
     "DiscoveryProvider",
@@ -13,4 +13,5 @@ __all__ = [
     "GoogleCSEProvider",
     "MockProvider",
     "OSMProvider",
+    "OverpassUnavailable",
 ]
