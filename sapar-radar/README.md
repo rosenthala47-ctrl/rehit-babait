@@ -112,6 +112,14 @@ sapar-radar run --dry-run                # בלי לכתוב קבצים או מ�
 sapar-radar run --web-verify --notify    # + אימות רשת + שליחה לטלגרם
 ```
 
+### גרסת אתר (לטלפון, בלי טרמינל)
+
+`streamlit_app.py` הוא ממשק גרפי לאותו פייפליין - חיפוש, כרטיסי מספרה עם
+כפתור חיוג, עדכון סטטוס, הורדת CSV. פרסום חינמי ל-web על
+[Streamlit Community Cloud](https://share.streamlit.io): repo זה, branch
+הרצוי, main file path `sapar-radar/streamlit_app.py`. שלבים מלאים
+ב-[INSTALL.md](INSTALL.md), שלב 9.
+
 ---
 
 ## הפקודות
