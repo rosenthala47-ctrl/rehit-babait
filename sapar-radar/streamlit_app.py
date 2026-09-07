@@ -289,7 +289,12 @@ with tab_search:
                 st.markdown(f"**{p.name}** — {VERDICT_LABELS_HE[lead.verdict]} [{lead.score}]")
                 st.write(f"{p.address} | {rating}")
                 if phone:
-                    st.markdown(f"📞 [{p.phone}](tel:{phone})")
+                    call_col, wa_col = st.columns(2)
+                    call_col.link_button("📞 התקשר", f"tel:{phone}", width='stretch')
+                    wa_col.link_button(
+                        "💬 WhatsApp", f"https://wa.me/{phone.lstrip('+')}",
+                        width='stretch',
+                    )
                 if p.website:
                     st.markdown(f"🔗 [{p.website}]({p.website})")
                 if p.maps_url:
