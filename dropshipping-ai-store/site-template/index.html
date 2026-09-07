@@ -1,0 +1,353 @@
+<!--
+  תבנית עיצוב לדף מוצר — סטטי, ללא build step, ללא תלויות.
+  זהו רפרנס ויזואלי בלבד: כפתור ה-CTA לא מחובר לעגלה/סליקה אמיתית.
+  בפועל יש לחבר אותו ל-Shopify Checkout / Stripe Checkout (מארח, PCI-compliant) —
+  ראו docs/02-website-plan.md. התוכן (מוצר/מחיר/ביקורות) לדוגמה בלבד.
+-->
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>טיפה · בקבוק מים חכם עם תזכורת שתייה</title>
+  <meta name="description" content="בקבוק מים חכם עם טבעת LED שמזכירה לך מתי לשתות, ומעקב יומי באפליקציה." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --bg:      #f3f8f7;
+      --surface: #ffffff;
+      --ink:     #172321;
+      --muted:   #6b7b78;
+      --line:    #e1ebe9;
+      --brand:   #0f7c73;
+      --brand-dk:#0b5f58;
+      --brand-sf:#e3f3f1;
+      --accent:  #ff6b57;
+      --accent-dk:#e6543f;
+      --star:    #f5a623;
+      --shadow:    0 6px 24px rgba(15,60,55,0.08);
+      --shadow-lg: 0 16px 44px rgba(15,60,55,0.16);
+      --radius: 18px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Assistant', sans-serif;
+      min-height: 100svh;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: 84px; /* מקום לסרגל ה-CTA הנדבק */
+    }
+
+    .wrap { max-width: 640px; margin: 0 auto; padding: 0 1rem; }
+    a { color: inherit; }
+    ul { list-style: none; }
+
+    /* ── Header ── */
+    header.site {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(243,248,247,0.92); backdrop-filter: blur(6px);
+      border-bottom: 1px solid var(--line);
+    }
+    header.site .row {
+      max-width: 640px; margin: 0 auto; padding: 0.85rem 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .brand { font-weight: 800; font-size: 1.15rem; letter-spacing: 0.01em; color: var(--brand-dk); }
+    .brand em { font-style: normal; color: var(--accent); }
+    .cart-btn {
+      display: flex; align-items: center; gap: 0.3rem;
+      background: none; border: none; color: var(--ink);
+      font-family: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    }
+    .cart-btn svg { width: 22px; height: 22px; stroke: var(--ink); fill: none; stroke-width: 1.6; }
+
+    /* ── Gallery ── */
+    .gallery { position: relative; margin-top: 0.9rem; }
+    .gallery-main {
+      position: relative; aspect-ratio: 1 / 1; border-radius: var(--radius);
+      background: linear-gradient(160deg, var(--brand-sf), #cdeae5 70%);
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; box-shadow: var(--shadow);
+    }
+    .gallery-main svg { width: 46%; height: 46%; }
+    .badge-sample {
+      position: absolute; top: 0.7rem; inset-inline-start: 0.7rem;
+      background: rgba(23,35,33,0.55); color: #fff; font-size: 0.68rem; font-weight: 600;
+      padding: 0.3rem 0.6rem; border-radius: 99px;
+    }
+    .badge-sale {
+      position: absolute; top: 0.7rem; inset-inline-end: 0.7rem;
+      background: var(--accent); color: #fff; font-size: 0.72rem; font-weight: 700;
+      padding: 0.32rem 0.7rem; border-radius: 99px; box-shadow: var(--shadow);
+    }
+    .thumbs { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+    .thumbs .t {
+      flex: 1; aspect-ratio: 1/1; border-radius: 12px; background: var(--brand-sf);
+      border: 2px solid transparent; display: flex; align-items: center; justify-content: center;
+    }
+    .thumbs .t.active { border-color: var(--brand); }
+    .thumbs .t svg { width: 44%; height: 44%; }
+
+    /* ── Title / price ── */
+    .stars { display: flex; align-items: center; gap: 0.3rem; margin-top: 1rem; }
+    .stars svg { width: 15px; height: 15px; fill: var(--star); }
+    .stars span { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+
+    h1 { font-size: 1.5rem; font-weight: 800; line-height: 1.35; margin-top: 0.4rem; }
+    .subtitle { color: var(--muted); font-size: 0.92rem; margin-top: 0.35rem; line-height: 1.6; }
+
+    .price-row { display: flex; align-items: baseline; gap: 0.6rem; margin-top: 0.9rem; }
+    .price-now { font-size: 1.7rem; font-weight: 800; color: var(--brand-dk); }
+    .price-was { font-size: 1rem; color: var(--muted); text-decoration: line-through; }
+    .price-off { background: #fdeceA; color: var(--accent-dk); font-weight: 700; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 8px; }
+
+    .cta-main {
+      display: block; width: 100%; margin-top: 1.1rem; padding: 0.95rem;
+      background: var(--accent); color: #fff; border: none; border-radius: 14px;
+      font-family: inherit; font-size: 1.02rem; font-weight: 700; cursor: pointer;
+      box-shadow: 0 10px 24px rgba(255,107,87,0.35);
+    }
+    .cta-main:active { transform: scale(0.98); }
+
+    /* ── Trust badges ── */
+    .trust { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.5rem; margin-top: 1rem; }
+    .trust div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.6rem 0.4rem; text-align: center; }
+    .trust svg { width: 20px; height: 20px; stroke: var(--brand); fill: none; stroke-width: 1.6; margin-bottom: 0.3rem; }
+    .trust p { font-size: 0.68rem; color: var(--muted); font-weight: 600; line-height: 1.3; }
+
+    /* ── Sections ── */
+    section.block { margin-top: 2.1rem; }
+    h2 { font-size: 1.15rem; font-weight: 800; margin-bottom: 0.9rem; }
+
+    .feature-list li {
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      padding: 0.55rem 0; border-bottom: 1px dashed var(--line); font-size: 0.92rem; line-height: 1.5;
+    }
+    .feature-list li:last-child { border-bottom: none; }
+    .feature-list svg { width: 18px; height: 18px; stroke: var(--brand); fill: none; stroke-width: 2; flex: none; margin-top: 0.15rem; }
+
+    /* ── Reviews ── */
+    .review { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0.9rem 1rem; margin-bottom: 0.7rem; }
+    .review .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+    .review .name { font-weight: 700; font-size: 0.9rem; }
+    .review p { font-size: 0.88rem; color: var(--muted); line-height: 1.55; }
+    .review .stars { margin-top: 0; }
+
+    /* ── Urgency ── */
+    .urgency {
+      display: flex; align-items: center; gap: 0.6rem; background: var(--brand-sf);
+      border: 1px solid #bfe4df; border-radius: 12px; padding: 0.7rem 0.9rem; margin-top: 1.1rem;
+      font-size: 0.82rem; color: var(--brand-dk); font-weight: 600;
+    }
+    .urgency svg { width: 18px; height: 18px; stroke: var(--brand-dk); fill: none; stroke-width: 2; flex: none; }
+
+    /* ── FAQ ── */
+    details.faq { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.55rem; }
+    details.faq summary { cursor: pointer; font-weight: 700; font-size: 0.92rem; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+    details.faq summary::-webkit-details-marker { display: none; }
+    details.faq summary .chev { transition: transform 0.2s; }
+    details.faq[open] summary .chev { transform: rotate(180deg); }
+    details.faq p { font-size: 0.86rem; color: var(--muted); margin-top: 0.6rem; line-height: 1.6; }
+
+    /* ── Footer ── */
+    footer { margin-top: 2.5rem; padding: 1.5rem 0 1rem; text-align: center; border-top: 1px solid var(--line); }
+    footer .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.9rem; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.6rem; }
+    footer small { color: var(--muted); font-size: 0.72rem; }
+
+    /* ── Sticky bottom bar ── */
+    .sticky-bar {
+      position: fixed; inset-inline: 0; bottom: 0; z-index: 30;
+      background: var(--surface); border-top: 1px solid var(--line);
+      box-shadow: 0 -8px 24px rgba(15,60,55,0.08);
+      padding: 0.6rem 1rem; padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
+      display: flex; align-items: center; gap: 0.7rem;
+    }
+    .qty { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .qty button { width: 34px; height: 38px; background: var(--brand-sf); border: none; font-size: 1.05rem; font-weight: 700; color: var(--brand-dk); cursor: pointer; }
+    .qty span { width: 30px; text-align: center; font-weight: 700; font-size: 0.92rem; }
+    .sticky-bar .cta-main { margin-top: 0; flex: 1; padding: 0.8rem; font-size: 0.95rem; }
+
+    @media (min-width: 640px) {
+      h1 { font-size: 1.75rem; }
+      .gallery-main { border-radius: 22px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="site">
+    <div class="row">
+      <div class="brand">טיפה<em>.</em></div>
+      <button class="cart-btn" type="button" aria-label="עגלת קניות">
+        <svg viewBox="0 0 24 24"><path d="M3 3h2l2.4 12.4a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21 8H6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9.5" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
+        עגלה
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <div class="gallery">
+      <div class="gallery-main">
+        <span class="badge-sample">תמונת מוצר לדוגמה</span>
+        <span class="badge-sale">17% הנחה</span>
+        <!-- איור SVG כמציין-מקום — יש להחליף בצילום מוצר אמיתי -->
+        <svg viewBox="0 0 100 130" fill="none" stroke="#0f7c73" stroke-width="2.2">
+          <rect x="30" y="18" width="40" height="100" rx="14"/>
+          <path d="M40 18 V8 a10 10 0 0 1 20 0 v10" />
+          <circle cx="50" cy="46" r="5" fill="#0f7c73" stroke="none"/>
+          <path d="M38 70 h24 M38 82 h24 M38 94 h16" stroke-opacity=".5"/>
+        </svg>
+      </div>
+      <div class="thumbs">
+        <div class="t active"><svg viewBox="0 0 100 130" fill="none" stroke="#0f7c73" stroke-width="3"><rect x="30" y="18" width="40" height="100" rx="14"/></svg></div>
+        <div class="t"><svg viewBox="0 0 100 130" fill="none" stroke="#0f7c73" stroke-width="3"><circle cx="50" cy="60" r="30"/></svg></div>
+        <div class="t"><svg viewBox="0 0 100 130" fill="none" stroke="#0f7c73" stroke-width="3"><path d="M20 90 L50 30 L80 90 Z"/></svg></div>
+      </div>
+    </div>
+
+    <div class="stars" aria-label="דירוג 4.8 מתוך 5">
+      <svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg>
+      <svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg>
+      <svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg>
+      <svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg>
+      <svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg>
+      <span>4.8 · 312 ביקורות</span>
+    </div>
+
+    <h1>בקבוק מים חכם עם תזכורת LED</h1>
+    <p class="subtitle">מזכיר לך מתי לשתות, עוקב אחרי כמות המים היומית שלך באפליקציה, ושומר על הקרח שלך קר עד 24 שעות.</p>
+
+    <div class="price-row">
+      <span class="price-now">₪129</span>
+      <span class="price-was">₪155</span>
+      <span class="price-off">חיסכון ₪26</span>
+    </div>
+
+    <button class="cta-main" type="button">הוסיפו לעגלה</button>
+
+    <div class="trust">
+      <div>
+        <svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z" stroke-linejoin="round"/><circle cx="7" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/></svg>
+        <p>משלוח מהיר</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" stroke-linejoin="round"/></svg>
+        <p>תשלום מאובטח</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p>30 יום להחזרה</p>
+      </div>
+    </div>
+
+    <section class="block">
+      <h2>למה זה עובד</h2>
+      <ul class="feature-list">
+        <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> טבעת LED שמאירה כל שעתיים כתזכורת עדינה לשתות</li>
+        <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> מעקב יומי אחרי כמות השתייה דרך אפליקציה</li>
+        <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> שומר קר 24 שעות / חם 12 שעות</li>
+        <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> סוללה שמחזיקה עד שבועיים בטעינה אחת</li>
+        <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> עמיד למים, מתאים לחדר כושר/משרד/נסיעות</li>
+      </ul>
+    </section>
+
+    <section class="block">
+      <h2>מה לקוחות אומרים</h2>
+      <div class="review">
+        <div class="top"><span class="name">מאיה כ.</span>
+          <div class="stars"><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg></div>
+        </div>
+        <p>הבקבוק הראשון שבאמת גרם לי להשתמש בו כל יום. האור מזכיר לי בלי שאשים לב בכלל.</p>
+      </div>
+      <div class="review">
+        <div class="top"><span class="name">רון ש.</span>
+          <div class="stars"><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg><svg viewBox="0 0 20 20"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3L1 8.5l6.4-.6z"/></svg></div>
+        </div>
+        <p>הגיע תוך יומיים, הסוללה עדיין באחוזים גבוהים אחרי שבוע וחצי שימוש יומיומי.</p>
+      </div>
+    </section>
+
+    <div class="urgency">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span data-stock-message>נשארו יחידות אחרונות במלאי במחיר הזה</span>
+    </div>
+
+    <section class="block">
+      <h2>שאלות נפוצות</h2>
+      <details class="faq" open>
+        <summary>תוך כמה זמן ההזמנה מגיעה? <span class="chev">⌄</span></summary>
+        <p>זמן המשלוח בפועל נקבע לפי הספק שנבחר — יש לעדכן כאן את זמן המשלוח האמיתי ברגע שהחנות מחוברת לספק.</p>
+      </details>
+      <details class="faq">
+        <summary>איך עובדת האחריות וההחזרה? <span class="chev">⌄</span></summary>
+        <p>יש לקשר כאן למדיניות ההחזרים/האחריות המלאה של החנות.</p>
+      </details>
+      <details class="faq">
+        <summary>איך מתחברים לאפליקציה? <span class="chev">⌄</span></summary>
+        <p>הוראות התחברות מגיעות בתוך האריזה, ותלויות באפליקציה הספציפית של הספק שנבחר.</p>
+      </details>
+    </section>
+
+    <footer>
+      <div class="links">
+        <a href="#">מדיניות משלוחים</a>
+        <a href="#">מדיניות החזרים</a>
+        <a href="#">תקנון</a>
+        <a href="#">צור קשר</a>
+      </div>
+      <small>תבנית עיצוב לדוגמה · יש לחבר לחנות Shopify אמיתית לפני שימוש בפועל</small>
+    </footer>
+  </main>
+
+  <div class="sticky-bar">
+    <div class="qty">
+      <button type="button" data-qty-minus aria-label="הפחת כמות">−</button>
+      <span data-qty-value>1</span>
+      <button type="button" data-qty-plus aria-label="הוסף כמות">+</button>
+    </div>
+    <button class="cta-main" type="button">הוסיפו לעגלה · ₪129</button>
+  </div>
+
+  <script>
+    (function () {
+      // מציין-מקום להדגמת האינטראקציה בלבד — אין כאן חיבור אמיתי לעגלה/מלאי.
+      var qty = 1;
+      var qtyEl = document.querySelector('[data-qty-value]');
+      document.querySelector('[data-qty-minus]').addEventListener('click', function () {
+        qty = Math.max(1, qty - 1);
+        qtyEl.textContent = qty;
+      });
+      document.querySelector('[data-qty-plus]').addEventListener('click', function () {
+        qty = Math.min(9, qty + 1);
+        qtyEl.textContent = qty;
+      });
+
+      var thumbs = document.querySelectorAll('.thumbs .t');
+      thumbs.forEach(function (thumb) {
+        thumb.addEventListener('click', function () {
+          thumbs.forEach(function (t) { t.classList.remove('active'); });
+          thumb.classList.add('active');
+        });
+      });
+
+      // EXAMPLE_STOCK_COUNT: יש להחליף במספר מלאי אמיתי מה-API של Shopify.
+      // הצגת "מלאי אחרון" שאינה אמיתית אסורה במדיניות רוב פלטפורמות הפרסום.
+      var EXAMPLE_STOCK_COUNT = 6;
+      var stockEl = document.querySelector('[data-stock-message]');
+      if (stockEl && EXAMPLE_STOCK_COUNT > 0) {
+        stockEl.textContent = 'נשארו ' + EXAMPLE_STOCK_COUNT + ' יחידות במלאי במחיר הזה';
+      }
+    })();
+  </script>
+
+</body>
+</html>
