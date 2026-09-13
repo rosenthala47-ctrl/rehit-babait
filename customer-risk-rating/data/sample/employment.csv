@@ -1,0 +1,9 @@
+customer_id,employment_status,employer,occupation,monthly_income,tenure_months
+C1001,employed_permanent,חברת הייטק סייבר בע״מ,מהנדס תוכנה,18000,40
+C1002,employed_temp,רשת קמעונאות ארצית,קופאית,9000,10
+C1003,unemployed,,,4000,0
+C1004,civil_servant,משרד החינוך,מורה,16000,120
+C1005,self_employed,עסק עצמאי לשיפוצים,קבלן שיפוצים,22000,84
+C1006,student,משרה חלקית - בית קפה,מלצרית,6000,8
+C1007,pensioner,,גמלאי,11000,
+C1008,employed_permanent,חברת לוגיסטיקה ארצית,נהג חלוקה,12000,30

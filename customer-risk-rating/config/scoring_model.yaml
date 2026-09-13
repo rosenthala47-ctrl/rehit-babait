@@ -1,0 +1,202 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# מודל דירוג סיכון לקוח  ·  Customer Risk-Rating model
+# ─────────────────────────────────────────────────────────────────────────────
+# זהו הקובץ שאנליסט/חתם האשראי עורך — ללא נגיעה בקוד.
+# כאן קובעים:
+#   1. אילו קריטריונים נכללים בדירוג.
+#   2. כמה אחוז (weight) כל קריטריון משפיע על הציון הסופי (הסכום חייב להיות 1.0).
+#   3. איך כל ערך גולמי הופך ל"תת-ציון סיכון" בסקאלה 1–10.
+#   4. ספי ההחלטה: איזה ציון מאושר, איזה נשלח לבדיקה, ואיזה נדחה.
+#
+# הציון הוא ציון-סיכון: נמוך = סיכון נמוך (לאשר), גבוה = סיכון גבוה (לדחות).
+# כל תת-ציון: 1 = הכי טוב (סיכון נמוך) ... 10 = הכי גרוע (סיכון גבוה).
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: 1
+
+scale:
+  min: 1
+  max: 10
+
+assumptions:
+  currency: "ILS"          # מטבע להצגה בלבד
+  # מח"מ משוער (חודשים) לחישוב התשלום החודשי של ההלוואה המבוקשת (עבור יחס ה-DTI)
+  default_term_months: 60
+
+# רצועות ההחלטה — נקבעות לפי הציון הסופי המעוגל (1–10)
+decision_bands:
+  - id: approve
+    min: 1
+    max: 3
+    label_he: "אישור"
+    label_en: "Approve"
+    action_he: "אישור ההלוואה בתנאים הרגילים."
+  - id: review
+    min: 4
+    max: 6
+    label_he: "בדיקה ידנית / אישור חלקי"
+    label_en: "Manual review"
+    action_he: "העברה לחתם אנושי; לשקול סכום מופחת, ערב או בטוחה."
+  - id: reject
+    min: 7
+    max: 10
+    label_he: "דחייה"
+    label_en: "Reject"
+    action_he: "דחיית הבקשה — רמת סיכון גבוהה מדי."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# הקריטריונים.  weight = אחוז ההשפעה על הציון הסופי (סה"כ = 1.00)
+#
+# type: categorical    → ממפה ערך טקסטואלי לתת-ציון דרך "mapping".
+# type: numeric_bands  → בוחר את הרצועה הראשונה שבה  ערך <= max  ומשתמש ב-risk שלה.
+#                        (הרצועות חייבות להיות מסודרות מהקטן לגדול; הרצועה האחרונה max: .inf)
+#
+# source: שם השדה בטבלאות הנתונים, או "derived:<שם>" לערך מחושב (ראו features.py).
+# missing_risk: תת-הציון כשאין נתון כלל.   unknown_risk: לערך קטגורי לא מוכר.
+# ─────────────────────────────────────────────────────────────────────────────
+criteria:
+
+  - id: employment_status
+    label_he: "מצב תעסוקתי"
+    label_en: "Employment status"
+    weight: 0.15
+    source: employment_status
+    type: categorical
+    mapping:
+      employed_permanent: 1     # שכיר קבוע
+      civil_servant: 1          # עובד מדינה / מגזר ציבורי
+      self_employed: 4          # עצמאי
+      employed_temp: 5          # שכיר זמני / חוזה
+      pensioner: 4              # פנסיונר
+      student: 6                # סטודנט
+      unemployed: 10            # מובטל
+    unknown_risk: 7
+    missing_risk: 8
+
+  - id: income_level
+    label_he: "רמת הכנסה חודשית (נטו)"
+    label_en: "Monthly net income"
+    weight: 0.12
+    source: monthly_income
+    type: numeric_bands
+    bands:
+      - {max: 5000,  risk: 10}
+      - {max: 7000,  risk: 8}
+      - {max: 10000, risk: 6}
+      - {max: 15000, risk: 4}
+      - {max: 20000, risk: 3}
+      - {max: 30000, risk: 2}
+      - {max: .inf,  risk: 1}
+    missing_risk: 8
+
+  - id: affordability
+    label_he: "יכולת החזר (DTI) כולל ההלוואה המבוקשת"
+    label_en: "Debt-to-income incl. requested loan"
+    weight: 0.20
+    source: "derived:dti"
+    type: numeric_bands
+    bands:
+      - {max: 0.20, risk: 1}
+      - {max: 0.30, risk: 3}
+      - {max: 0.40, risk: 5}
+      - {max: 0.50, risk: 7}
+      - {max: 0.70, risk: 9}
+      - {max: .inf, risk: 10}
+    missing_risk: 8
+
+  - id: payment_history
+    label_he: "היסטוריית תשלומים (פיגורים ב-12 החודשים האחרונים)"
+    label_en: "Missed payments (last 12m)"
+    weight: 0.15
+    source: missed_payments_12m
+    type: numeric_bands
+    bands:
+      - {max: 0,   risk: 1}
+      - {max: 1,   risk: 3}
+      - {max: 2,   risk: 5}
+      - {max: 3,   risk: 7}
+      - {max: .inf, risk: 9}
+    missing_risk: 6
+
+  - id: defaults
+    label_he: "כשלי אשראי / הליכי הוצאה לפועל"
+    label_en: "Defaults / collections"
+    weight: 0.10
+    source: defaults
+    type: numeric_bands
+    bands:
+      - {max: 0,   risk: 1}
+      - {max: 1,   risk: 6}
+      - {max: .inf, risk: 10}
+    missing_risk: 5
+
+  - id: credit_utilization
+    label_he: "ניצול מסגרות אשראי"
+    label_en: "Credit utilization"
+    weight: 0.08
+    source: credit_utilization
+    type: numeric_bands
+    bands:
+      - {max: 0.30, risk: 1}
+      - {max: 0.50, risk: 3}
+      - {max: 0.70, risk: 5}
+      - {max: 0.90, risk: 8}
+      - {max: .inf, risk: 10}
+    missing_risk: 5
+
+  - id: employment_tenure
+    label_he: "ותק במקום העבודה (חודשים)"
+    label_en: "Job tenure (months)"
+    weight: 0.07
+    source: tenure_months
+    type: numeric_bands
+    bands:
+      - {max: 6,    risk: 9}
+      - {max: 12,   risk: 7}
+      - {max: 24,   risk: 5}
+      - {max: 36,   risk: 3}
+      - {max: 60,   risk: 2}
+      - {max: .inf, risk: 1}
+    missing_risk: 6
+
+  - id: age
+    label_he: "גיל"
+    label_en: "Age"
+    weight: 0.05
+    source: age
+    type: numeric_bands
+    bands:
+      - {max: 20,   risk: 6}
+      - {max: 24,   risk: 4}
+      - {max: 60,   risk: 1}
+      - {max: 70,   risk: 4}
+      - {max: .inf, risk: 7}
+    missing_risk: 5
+
+  - id: banking_conduct
+    label_he: "התנהלות בנקאית (ימי חריגה ממסגרת ב-12 ח')"
+    label_en: "Banking conduct (overdraft days)"
+    weight: 0.05
+    source: overdraft_days_12m
+    type: numeric_bands
+    bands:
+      - {max: 0,    risk: 1}
+      - {max: 15,   risk: 3}
+      - {max: 45,   risk: 5}
+      - {max: 90,   risk: 8}
+      - {max: .inf, risk: 10}
+    missing_risk: 5
+
+  - id: family_stability
+    label_he: "יציבות משפחתית (מצב משפחתי)"
+    label_en: "Family stability (marital status)"
+    weight: 0.03
+    source: marital_status
+    type: categorical
+    mapping:
+      married: 1      # נשוי/אה
+      widowed: 3      # אלמן/ה
+      single: 4       # רווק/ה
+      divorced: 5     # גרוש/ה
+    unknown_risk: 4
+    missing_risk: 4

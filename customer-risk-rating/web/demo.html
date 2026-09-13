@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>דירוג סיכון לקוח — הדגמה</title>
+<style>
+  :root {
+    --bg: #f1f5f9; --card: #ffffff; --ink: #0f172a; --muted: #64748b;
+    --line: #e2e8f0; --brand: #1d4ed8; --brand-ink: #1e3a8a;
+    --approve: #16a34a; --review: #d97706; --reject: #dc2626;
+    --shadow: 0 10px 30px rgba(15,23,42,.08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", Arial, "Noto Sans Hebrew", sans-serif; line-height: 1.5; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 24px 16px 60px; }
+  header h1 { margin: 0 0 4px; font-size: 1.7rem; }
+  header p { margin: 0 0 8px; color: var(--muted); }
+  .tag { display:inline-block; font-size:.72rem; background:#e0e7ff; color:#3730a3;
+    padding:3px 10px; border-radius:999px; margin-bottom:16px; }
+  .card { background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; box-shadow: var(--shadow); padding: 20px; margin-bottom: 20px; }
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: end; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+  select, input[type=number] { width: 100%; padding: 11px 12px; font-size: 1rem;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+  button { grid-column: 1 / -1; padding: 13px; font-size: 1.05rem; font-weight: 600;
+    color: #fff; background: var(--brand); border: 0; border-radius: 10px; cursor: pointer; }
+  button:hover { background: var(--brand-ink); }
+  .headline { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .score-num { font-size: 3.2rem; font-weight: 800; line-height: 1; }
+  .score-num small { font-size: 1.1rem; color: var(--muted); font-weight: 500; }
+  .badge { padding: 8px 16px; border-radius: 999px; font-weight: 700; color: #fff; font-size: 1.05rem; }
+  .meta { color: var(--muted); font-size: .95rem; margin-inline-start: auto; text-align: start; }
+  .meta b { color: var(--ink); }
+  .scale { position: relative; height: 14px; border-radius: 999px; margin: 22px 0 8px;
+    background: linear-gradient(90deg, var(--approve) 0 30%, var(--review) 30% 60%, var(--reject) 60% 100%); }
+  .marker { position: absolute; top: -6px; width: 4px; height: 26px; background: #0f172a;
+    border-radius: 2px; box-shadow: 0 0 0 3px #fff; }
+  .scale-legend { display: flex; justify-content: space-between; font-size: .78rem; color: var(--muted); }
+  h3 { margin: 24px 0 12px; font-size: 1.05rem; }
+  .crit { padding: 10px 0; border-top: 1px solid var(--line); }
+  .crit-top { display: flex; justify-content: space-between; gap: 10px; font-size: .92rem; }
+  .crit-name { font-weight: 600; }
+  .crit-val { color: var(--muted); }
+  .miss { color: var(--reject); }
+  .bar { height: 9px; background: #eef2f7; border-radius: 999px; margin-top: 7px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 999px; }
+  .crit-foot { font-size: .78rem; color: var(--muted); margin-top: 5px; display: flex; justify-content: space-between; }
+  .explain { margin-top: 22px; background: #f8fafc; border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px; white-space: pre-wrap; font-size: .95rem; }
+  .explain h3 { margin-top: 0; }
+  footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 8px; }
+  @media (max-width: 560px) { form { grid-template-columns: 1fr; } .meta { margin-inline-start: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>דירוג סיכון לקוח 🛡️</h1>
+    <p>המערכת שואבת את כל נתוני הלקוח ומחזירה ציון סיכון והחלטה — תוך שנייה.</p>
+    <span class="tag">הדגמה · כל החישוב מתבצע בדפדפן · נתונים לדוגמה בלבד</span>
+  </header>
+
+  <div class="card">
+    <form id="form">
+      <div>
+        <label for="customer">לקוח</label>
+        <select id="customer"></select>
+      </div>
+      <div>
+        <label for="amount">סכום ההלוואה המבוקש (₪)</label>
+        <input type="number" id="amount" value="100000" min="1000" step="1000" />
+      </div>
+      <button type="submit">חשב דירוג סיכון</button>
+    </form>
+  </div>
+
+  <div class="card" id="result">
+    <div class="headline">
+      <div class="score-num"><span id="score">–</span><small>/10</small></div>
+      <span class="badge" id="badge">–</span>
+      <div class="meta">
+        <div><b id="rname">–</b> · <span id="rid"></span></div>
+        <div>סכום מבוקש: <b id="ramount">–</b></div>
+      </div>
+    </div>
+    <div class="scale"><div class="marker" id="marker"></div></div>
+    <div class="scale-legend">
+      <span>סיכון גבוה · 10</span><span>6</span><span>3</span><span>1 · סיכון נמוך</span>
+    </div>
+    <h3>פירוט לפי קריטריון</h3>
+    <div id="breakdown"></div>
+    <div class="explain"><h3>חוות דעת</h3><div id="explainText"></div></div>
+  </div>
+
+  <footer>מנוע דירוג דטרמיניסטי ומבוקר · גרסת הדגמה של הפרויקט "דירוג סיכון לקוח"</footer>
+</div>
+
+<script>
+// ── מודל הניקוד (מראה את config/scoring_model.yaml) ─────────────────────────
+const MODEL = {
+  assumptions: { default_term_months: 60, currency: "ILS" },
+  decision_bands: [
+    { id: "approve", min: 1, max: 3, label: "אישור", action: "אישור ההלוואה בתנאים הרגילים." },
+    { id: "review",  min: 4, max: 6, label: "בדיקה ידנית / אישור חלקי", action: "העברה לחתם אנושי; לשקול סכום מופחת, ערב או בטוחה." },
+    { id: "reject",  min: 7, max: 10, label: "דחייה", action: "דחיית הבקשה — רמת סיכון גבוהה מדי." },
+  ],
+  criteria: [
+    { id: "employment_status", label: "מצב תעסוקתי", weight: 0.15, source: "employment_status", type: "cat",
+      mapping: { employed_permanent:1, civil_servant:1, self_employed:4, employed_temp:5, pensioner:4, student:6, unemployed:10 }, unknown:7, missing:8 },
+    { id: "income_level", label: "רמת הכנסה חודשית (נטו)", weight: 0.12, source: "monthly_income", type: "num",
+      bands: [[5000,10],[7000,8],[10000,6],[15000,4],[20000,3],[30000,2],[Infinity,1]], missing:8 },
+    { id: "affordability", label: "יכולת החזר (DTI) כולל ההלוואה המבוקשת", weight: 0.20, source: "dti", type: "num",
+      bands: [[0.20,1],[0.30,3],[0.40,5],[0.50,7],[0.70,9],[Infinity,10]], missing:8 },
+    { id: "payment_history", label: "היסטוריית תשלומים (פיגורים ב-12 החודשים האחרונים)", weight: 0.15, source: "missed_payments_12m", type: "num",
+      bands: [[0,1],[1,3],[2,5],[3,7],[Infinity,9]], missing:6 },
+    { id: "defaults", label: "כשלי אשראי / הליכי הוצאה לפועל", weight: 0.10, source: "defaults", type: "num",
+      bands: [[0,1],[1,6],[Infinity,10]], missing:5 },
+    { id: "credit_utilization", label: "ניצול מסגרות אשראי", weight: 0.08, source: "credit_utilization", type: "num",
+      bands: [[0.30,1],[0.50,3],[0.70,5],[0.90,8],[Infinity,10]], missing:5 },
+    { id: "employment_tenure", label: "ותק במקום העבודה (חודשים)", weight: 0.07, source: "tenure_months", type: "num",
+      bands: [[6,9],[12,7],[24,5],[36,3],[60,2],[Infinity,1]], missing:6 },
+    { id: "age", label: "גיל", weight: 0.05, source: "age", type: "num",
+      bands: [[20,6],[24,4],[60,1],[70,4],[Infinity,7]], missing:5 },
+    { id: "banking_conduct", label: "התנהלות בנקאית (ימי חריגה ממסגרת ב-12 ח')", weight: 0.05, source: "overdraft_days_12m", type: "num",
+      bands: [[0,1],[15,3],[45,5],[90,8],[Infinity,10]], missing:5 },
+    { id: "family_stability", label: "יציבות משפחתית (מצב משפחתי)", weight: 0.03, source: "marital_status", type: "cat",
+      mapping: { married:1, widowed:3, single:4, divorced:5 }, unknown:4, missing:4 },
+  ],
+};
+
+// ── נתוני לקוחות לדוגמה (ממוזגים מכל הטבלאות) ────────────────────────────────
+// שדה חסר בכוונה מדגים את הטיפול בנתונים חלקיים (נועה — ללא נתוני בנק; יעקב — ללא ותק).
+const CUSTOMERS = {
+  C1001: { full_name:"יוסי כהן", age:34, marital_status:"married", employment_status:"employed_permanent", monthly_income:18000, tenure_months:40, missed_payments_12m:0, defaults:0, credit_utilization:0.35, overdraft_days_12m:3, monthly_debt_payments:1800 },
+  C1002: { full_name:"שרה לוי", age:28, marital_status:"single", employment_status:"employed_temp", monthly_income:9000, tenure_months:10, missed_payments_12m:1, defaults:0, credit_utilization:0.60, overdraft_days_12m:20, monthly_debt_payments:2500 },
+  C1003: { full_name:"דוד מזרחי", age:45, marital_status:"divorced", employment_status:"unemployed", monthly_income:4000, tenure_months:0, missed_payments_12m:3, defaults:1, credit_utilization:0.95, overdraft_days_12m:100, monthly_debt_payments:4500 },
+  C1004: { full_name:"מרים אברהם", age:52, marital_status:"married", employment_status:"civil_servant", monthly_income:16000, tenure_months:120, missed_payments_12m:0, defaults:0, credit_utilization:0.20, overdraft_days_12m:0, monthly_debt_payments:1200 },
+  C1005: { full_name:"אבי פרץ", age:39, marital_status:"married", employment_status:"self_employed", monthly_income:22000, tenure_months:84, missed_payments_12m:1, defaults:0, credit_utilization:0.55, overdraft_days_12m:25, monthly_debt_payments:3800 },
+  C1006: { full_name:"נועה שפירא", age:22, marital_status:"single", employment_status:"student", monthly_income:6000, tenure_months:8, missed_payments_12m:0, defaults:0, credit_utilization:0.45, monthly_debt_payments:400 },
+  C1007: { full_name:"יעקב פרידמן", age:68, marital_status:"widowed", employment_status:"pensioner", monthly_income:11000, missed_payments_12m:0, defaults:0, credit_utilization:0.10, overdraft_days_12m:0, monthly_debt_payments:0 },
+  C1008: { full_name:"רון גולן", age:41, marital_status:"divorced", employment_status:"employed_permanent", monthly_income:12000, tenure_months:30, missed_payments_12m:4, defaults:2, credit_utilization:0.85, overdraft_days_12m:60, monthly_debt_payments:3200 },
+};
+
+// ── מנוע הניקוד (מראה את engine.py) ──────────────────────────────────────────
+const clamp = (r) => Math.max(1, Math.min(10, r));
+const isMissing = (v) => v === undefined || v === null || v === "";
+const roundHalfUp = (x) => Math.floor(x + 0.5);
+
+function dti(rec, ctx) {
+  const inc = rec.monthly_income;
+  if (!inc || inc <= 0) return null;
+  const term = ctx.term || 60;
+  const mdp = rec.monthly_debt_payments || 0;
+  return (mdp + ctx.amount / term) / inc;
+}
+
+function riskForCriterion(crit, rec, ctx) {
+  let raw = crit.source === "dti" ? dti(rec, ctx) : rec[crit.source];
+  if (isMissing(raw)) return { raw: null, risk: clamp(crit.missing), missing: true };
+  if (crit.type === "cat") {
+    const k = String(raw).toLowerCase();
+    const r = (k in crit.mapping) ? crit.mapping[k] : crit.unknown;
+    return { raw, risk: clamp(r), missing: false };
+  }
+  const val = Number(raw);
+  for (const [mx, rk] of crit.bands) if (val <= mx) return { raw, risk: clamp(rk), missing: false };
+  return { raw, risk: clamp(crit.bands[crit.bands.length - 1][1]), missing: false };
+}
+
+function score(rec, amount) {
+  const ctx = { amount, term: MODEL.assumptions.default_term_months };
+  let total = 0;
+  const breakdown = [];
+  for (const crit of MODEL.criteria) {
+    const { raw, risk, missing } = riskForCriterion(crit, rec, ctx);
+    const contribution = crit.weight * risk;
+    total += contribution;
+    breakdown.push({ id: crit.id, label: crit.label, weight: crit.weight, raw, risk, contribution, missing });
+  }
+  total = clamp(total);
+  const rounded = clamp(roundHalfUp(total));
+  const band = MODEL.decision_bands.find((b) => rounded >= b.min && rounded <= b.max);
+  return { score: total, rounded, band, breakdown };
+}
+
+// ── הסבר מילולי (מראה את explain.py) ────────────────────────────────────────
+const fmtRaw = (v) => (typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(2)) : String(v));
+const fmtAmount = (n) => Number(n).toLocaleString("he-IL") + " ₪";
+
+function explain(rec, res, amount) {
+  const lines = [];
+  lines.push(`הלקוח ${rec.full_name} ביקש הלוואה בסך ${fmtAmount(amount)}. ` +
+    `ציון הסיכון שחושב הוא ${res.score.toFixed(1)} מתוך 10 (מעוגל ל-${res.rounded}) — ההמלצה: ${res.band.label}.`);
+
+  const drivers = [...res.breakdown].filter((c) => c.risk >= 5).sort((a, b) => b.contribution - a.contribution).slice(0, 3);
+  if (drivers.length) {
+    lines.push("גורמי הסיכון המרכזיים: " + drivers.map((c) =>
+      `${c.label} (ערך: ${c.missing ? "חסר נתון" : fmtRaw(c.raw)}, תת-ציון ${c.risk}/10)`).join("; ") + ".");
+  }
+  const mitig = [...res.breakdown].filter((c) => c.risk <= 3 && !c.missing).sort((a, b) => b.weight - a.weight).slice(0, 3);
+  if (mitig.length) {
+    lines.push("גורמים ממתנים לטובת הלקוח: " + mitig.map((c) => `${c.label} (תת-ציון ${c.risk}/10)`).join("; ") + ".");
+  }
+  const missing = res.breakdown.filter((c) => c.missing).map((c) => c.label);
+  if (missing.length) {
+    lines.push("שים לב — חסרים נתונים בקריטריונים הבאים, ולכן שוקללה הערכת סיכון ברירת-מחדל: " + missing.join(", ") + ".");
+  }
+  lines.push("פעולה מומלצת: " + res.band.action);
+  return lines.join("\n");
+}
+
+// ── תצוגה ────────────────────────────────────────────────────────────────────
+const COLORS = { approve: "var(--approve)", review: "var(--review)", reject: "var(--reject)" };
+const riskColor = (r) => (r <= 3 ? "var(--approve)" : r <= 6 ? "var(--review)" : "var(--reject)");
+
+function render(rec, id, amount) {
+  const res = score(rec, amount);
+  document.getElementById("score").textContent = res.score.toFixed(1);
+  document.getElementById("rname").textContent = rec.full_name;
+  document.getElementById("rid").textContent = id;
+  document.getElementById("ramount").textContent = fmtAmount(amount);
+  const badge = document.getElementById("badge");
+  badge.textContent = res.band.label;
+  badge.style.background = COLORS[res.band.id];
+  document.getElementById("marker").style.right = ((res.score - 1) / 9 * 100) + "%";
+
+  const bd = document.getElementById("breakdown");
+  bd.innerHTML = "";
+  for (const c of [...res.breakdown].sort((a, b) => b.contribution - a.contribution)) {
+    const val = c.missing ? "— חסר נתון" : fmtRaw(c.raw);
+    const div = document.createElement("div");
+    div.className = "crit";
+    div.innerHTML = `
+      <div class="crit-top"><span class="crit-name">${c.label}</span>
+        <span class="crit-val ${c.missing ? "miss" : ""}">${val}</span></div>
+      <div class="bar"><span style="width:${c.risk * 10}%;background:${riskColor(c.risk)}"></span></div>
+      <div class="crit-foot"><span>משקל ${(c.weight * 100).toFixed(0)}% · תת-ציון ${c.risk}/10</span>
+        <span>תרומה לסיכון: ${c.contribution.toFixed(2)}</span></div>`;
+    bd.appendChild(div);
+  }
+  document.getElementById("explainText").textContent = explain(rec, res, amount);
+}
+
+// ── אתחול ────────────────────────────────────────────────────────────────────
+const sel = document.getElementById("customer");
+for (const [id, rec] of Object.entries(CUSTOMERS)) {
+  const o = document.createElement("option");
+  o.value = id; o.textContent = `${rec.full_name} (${id})`;
+  sel.appendChild(o);
+}
+function run() {
+  const id = sel.value;
+  const amount = Number(document.getElementById("amount").value) || 0;
+  render(CUSTOMERS[id], id, amount);
+}
+document.getElementById("form").addEventListener("submit", (e) => { e.preventDefault(); run(); });
+run(); // הצגת תוצאה ראשונית (יוסי · 100,000)
+</script>
+</body>
+</html>
