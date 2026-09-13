@@ -39,6 +39,7 @@ DEFAULT_REGISTER = PROJECT_ROOT / "data" / "bureau" / "credit_register.csv"
 _REGISTER_FIELDS = (
     "bureau_score", "num_open_loans", "total_debt", "monthly_debt_payments",
     "missed_payments_12m", "defaults", "credit_utilization", "oldest_account_years",
+    "hard_inquiries_6m",
 )
 
 
@@ -85,6 +86,7 @@ class CreditReport:
     defaults: Optional[float] = None
     credit_utilization: Optional[float] = None
     oldest_account_years: Optional[float] = None
+    hard_inquiries_6m: Optional[float] = None
     source: str = "mock"
     retrieved_at: str = ""
     consent_ref: Optional[str] = None
@@ -104,6 +106,7 @@ class CreditReport:
             "defaults": self.defaults,
             "credit_utilization": self.credit_utilization,
             "oldest_account_years": self.oldest_account_years,
+            "hard_inquiries_6m": self.hard_inquiries_6m,
         }
         return {k: v for k, v in mapping.items() if v is not None}
 
@@ -256,6 +259,7 @@ class HttpBankOfIsraelClient(CreditBureauClient):
             defaults=_to_float(data.get("defaults")),
             credit_utilization=_to_float(data.get("utilization")),
             oldest_account_years=_to_float(data.get("credit_history_years")),
+            hard_inquiries_6m=_to_float(data.get("recent_inquiries_6m")),
             source=self.source,
             retrieved_at=_now_iso(),
             consent_ref=consent_ref,

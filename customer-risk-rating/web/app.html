@@ -88,6 +88,30 @@
         <label for="amount">סכום ההלוואה המבוקש (₪)</label>
         <input type="number" id="amount" value="100000" min="1000" step="1000" />
       </div>
+      <div>
+        <label for="purpose">מטרת ההלוואה</label>
+        <select id="purpose">
+          <option value="debt_consolidation">איחוד הלוואות</option>
+          <option value="home_renovation">שיפוץ דירה</option>
+          <option value="vehicle">רכב</option>
+          <option value="education">השכלה</option>
+          <option value="medical">רפואי</option>
+          <option value="business">עסק / הון חוזר</option>
+          <option value="life_event">אירוע (חתונה וכו')</option>
+          <option value="consumption">צריכה / נסיעה</option>
+          <option value="investment">השקעה ספקולטיבית</option>
+          <option value="other">אחר</option>
+        </select>
+      </div>
+      <div>
+        <label for="collateral">בטוחה</label>
+        <select id="collateral">
+          <option value="unsecured">ללא בטוחה</option>
+          <option value="guarantor">ערב בלבד</option>
+          <option value="partial_secured">מובטח חלקית</option>
+          <option value="full_secured">מובטח מלא (נכס/רכב)</option>
+        </select>
+      </div>
       <div class="row-full checkbox">
         <input type="checkbox" id="consent" checked />
         <label for="consent" style="margin:0">הלקוח נתן הסכמה למשיכת נתוני אשראי ממרשם בנק ישראל</label>
@@ -219,6 +243,8 @@ document.getElementById("form").addEventListener("submit", async (ev) => {
       customer: document.getElementById("customer").value,
       amount: Number(document.getElementById("amount").value),
       consent: document.getElementById("consent").checked,
+      purpose: document.getElementById("purpose").value,
+      collateral: document.getElementById("collateral").value,
       explain: true,
       use_ai: document.getElementById("use_ai").checked,
     };

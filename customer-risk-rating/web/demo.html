@@ -79,6 +79,30 @@
         <label for="amount">סכום ההלוואה המבוקש (₪)</label>
         <input type="number" id="amount" value="100000" min="1000" step="1000" />
       </div>
+      <div>
+        <label for="purpose">מטרת ההלוואה</label>
+        <select id="purpose">
+          <option value="debt_consolidation">איחוד הלוואות</option>
+          <option value="home_renovation">שיפוץ דירה</option>
+          <option value="vehicle">רכב</option>
+          <option value="education">השכלה</option>
+          <option value="medical">רפואי</option>
+          <option value="business">עסק / הון חוזר</option>
+          <option value="life_event">אירוע (חתונה וכו')</option>
+          <option value="consumption">צריכה / נסיעה</option>
+          <option value="investment">השקעה ספקולטיבית</option>
+          <option value="other">אחר</option>
+        </select>
+      </div>
+      <div>
+        <label for="collateral">בטוחה</label>
+        <select id="collateral">
+          <option value="unsecured">ללא בטוחה</option>
+          <option value="guarantor">ערב בלבד</option>
+          <option value="partial_secured">מובטח חלקית</option>
+          <option value="full_secured">מובטח מלא (נכס/רכב)</option>
+        </select>
+      </div>
       <div class="checkbox">
         <input type="checkbox" id="consent" checked />
         <label for="consent" style="margin:0">הלקוח נתן הסכמה למשיכת נתוני אשראי ממרשם בנק ישראל</label>
@@ -118,27 +142,45 @@ const MODEL = {
     { id: "review",  min: 4, max: 6, label: "בדיקה ידנית / אישור חלקי", action: "העברה לחתם אנושי; לשקול סכום מופחת, ערב או בטוחה." },
     { id: "reject",  min: 7, max: 10, label: "דחייה", action: "דחיית הבקשה — רמת סיכון גבוהה מדי." },
   ],
+  // מסודר לפי 5 C's — ראו config/scoring_model.yaml. משקלים בהשראת FICO/VantageScore.
   criteria: [
-    { id: "bureau_score", label: "דירוג אשראי (לשכת נתוני אשראי / בנק ישראל)", weight: 0.15, source: "external_bureau_score", type: "num",
+    // Character (~40%)
+    { id: "bureau_score", label: "דירוג אשראי (לשכת נתוני אשראי / בנק ישראל)", weight: 0.10, source: "external_bureau_score", type: "num",
       bands: [[500,10],[580,8],[640,6],[700,4],[760,2],[Infinity,1]], missing:7 },
-    { id: "employment_status", label: "מצב תעסוקתי", weight: 0.13, source: "employment_status", type: "cat",
-      mapping: { employed_permanent:1, civil_servant:1, self_employed:4, employed_temp:5, pensioner:4, student:6, unemployed:10 }, unknown:7, missing:8 },
-    { id: "income_level", label: "רמת הכנסה חודשית (נטו)", weight: 0.10, source: "monthly_income", type: "num",
-      bands: [[5000,10],[7000,8],[10000,6],[15000,4],[20000,3],[30000,2],[Infinity,1]], missing:8 },
-    { id: "affordability", label: "יכולת החזר (DTI) כולל ההלוואה המבוקשת", weight: 0.18, source: "dti", type: "num",
-      bands: [[0.20,1],[0.30,3],[0.40,5],[0.50,7],[0.70,9],[Infinity,10]], missing:8 },
-    { id: "payment_history", label: "היסטוריית תשלומים (פיגורים ב-12 החודשים האחרונים)", weight: 0.12, source: "missed_payments_12m", type: "num",
+    { id: "payment_history", label: "היסטוריית תשלומים (פיגורים ב-12 ח')", weight: 0.10, source: "missed_payments_12m", type: "num",
       bands: [[0,1],[1,3],[2,5],[3,7],[Infinity,9]], missing:6 },
-    { id: "defaults", label: "כשלי אשראי / הליכי הוצאה לפועל", weight: 0.08, source: "defaults", type: "num",
+    { id: "defaults", label: "כשלי אשראי / הוצל\"פ / כונס / חשבון מוגבל", weight: 0.07, source: "defaults", type: "num",
       bands: [[0,1],[1,6],[Infinity,10]], missing:5 },
     { id: "credit_utilization", label: "ניצול מסגרות אשראי", weight: 0.06, source: "credit_utilization", type: "num",
       bands: [[0.30,1],[0.50,3],[0.70,5],[0.90,8],[Infinity,10]], missing:5 },
-    { id: "employment_tenure", label: "ותק במקום העבודה (חודשים)", weight: 0.06, source: "tenure_months", type: "num",
+    { id: "credit_history_length", label: "אורך היסטוריית האשראי (שנים)", weight: 0.04, source: "oldest_account_years", type: "num",
+      bands: [[1,8],[3,6],[7,4],[15,2],[Infinity,1]], missing:5 },
+    { id: "recent_inquiries", label: "בקשות אשראי אחרונות (6 ח')", weight: 0.03, source: "hard_inquiries_6m", type: "num",
+      bands: [[0,1],[1,2],[2,4],[4,6],[6,8],[Infinity,10]], missing:4 },
+    // Capacity (~35%)
+    { id: "affordability", label: "יכולת החזר (DTI) כולל ההלוואה המבוקשת", weight: 0.15, source: "dti", type: "num",
+      bands: [[0.20,1],[0.30,3],[0.40,5],[0.50,7],[0.70,9],[Infinity,10]], missing:8 },
+    { id: "income_level", label: "רמת הכנסה חודשית (נטו)", weight: 0.07, source: "monthly_income", type: "num",
+      bands: [[5000,10],[7000,8],[10000,6],[15000,4],[20000,3],[30000,2],[Infinity,1]], missing:8 },
+    { id: "existing_leverage", label: "מינוף קיים (סך חוב ביחס להכנסה שנתית)", weight: 0.06, source: "existing_leverage", type: "num",
+      bands: [[0.5,1],[1.0,3],[2.0,5],[3.0,7],[5.0,9],[Infinity,10]], missing:6 },
+    { id: "employment_status", label: "מצב תעסוקתי", weight: 0.05, source: "employment_status", type: "cat",
+      mapping: { employed_permanent:1, civil_servant:1, self_employed:4, employed_temp:5, pensioner:4, student:6, unemployed:10 }, unknown:7, missing:8 },
+    { id: "employment_tenure", label: "ותק במקום העבודה (חודשים)", weight: 0.02, source: "tenure_months", type: "num",
       bands: [[6,9],[12,7],[24,5],[36,3],[60,2],[Infinity,1]], missing:6 },
-    { id: "age", label: "גיל", weight: 0.04, source: "age", type: "num",
-      bands: [[20,6],[24,4],[60,1],[70,4],[Infinity,7]], missing:5 },
-    { id: "banking_conduct", label: "התנהלות בנקאית (ימי חריגה ממסגרת ב-12 ח')", weight: 0.05, source: "overdraft_days_12m", type: "num",
+    // Capital (~8%)
+    { id: "liquidity_savings", label: "נזילות / חיסכון (יתרה ממוצעת בעו\"ש)", weight: 0.04, source: "avg_balance", type: "num",
+      bands: [[0,10],[2000,8],[10000,5],[25000,3],[50000,2],[Infinity,1]], missing:6 },
+    { id: "banking_conduct", label: "התנהלות בנקאית (ימי חריגה ממסגרת ב-12 ח')", weight: 0.04, source: "overdraft_days_12m", type: "num",
       bands: [[0,1],[15,3],[45,5],[90,8],[Infinity,10]], missing:5 },
+    // Collateral (~7%)
+    { id: "collateral", label: "בטוחה / ביטחונות להלוואה", weight: 0.07, source: "collateral", type: "cat",
+      mapping: { full_secured:1, partial_secured:4, guarantor:5, unsecured:7 }, unknown:6, missing:6 },
+    // Conditions & profile (~10%)
+    { id: "loan_purpose", label: "מטרת ההלוואה", weight: 0.05, source: "loan_purpose", type: "cat",
+      mapping: { debt_consolidation:3, home_renovation:3, vehicle:3, education:4, medical:4, business:5, life_event:5, consumption:6, investment:9, other:5 }, unknown:5, missing:4 },
+    { id: "age", label: "גיל", weight: 0.02, source: "age", type: "num",
+      bands: [[20,6],[24,4],[60,1],[70,4],[Infinity,7]], missing:5 },
     { id: "family_stability", label: "יציבות משפחתית (מצב משפחתי)", weight: 0.03, source: "marital_status", type: "cat",
       mapping: { married:1, widowed:3, single:4, divorced:5 }, unknown:4, missing:4 },
   ],
@@ -146,26 +188,26 @@ const MODEL = {
 
 // ── נתוני החברה עצמה (דמוגרפיה, תעסוקה, בנק) — ללא נתוני אשראי ────────────────
 const COMPANY = {
-  C1001: { full_name:"יוסי כהן", national_id:"034512789", age:34, marital_status:"married", employment_status:"employed_permanent", monthly_income:18000, tenure_months:40, overdraft_days_12m:3 },
-  C1002: { full_name:"שרה לוי", national_id:"045678123", age:28, marital_status:"single", employment_status:"employed_temp", monthly_income:9000, tenure_months:10, overdraft_days_12m:20 },
-  C1003: { full_name:"דוד מזרחי", national_id:"023456781", age:45, marital_status:"divorced", employment_status:"unemployed", monthly_income:4000, tenure_months:0, overdraft_days_12m:100 },
-  C1004: { full_name:"מרים אברהם", national_id:"056789234", age:52, marital_status:"married", employment_status:"civil_servant", monthly_income:16000, tenure_months:120, overdraft_days_12m:0 },
-  C1005: { full_name:"אבי פרץ", national_id:"067890345", age:39, marital_status:"married", employment_status:"self_employed", monthly_income:22000, tenure_months:84, overdraft_days_12m:25 },
+  C1001: { full_name:"יוסי כהן", national_id:"034512789", age:34, marital_status:"married", employment_status:"employed_permanent", monthly_income:18000, tenure_months:40, overdraft_days_12m:3, avg_balance:22000 },
+  C1002: { full_name:"שרה לוי", national_id:"045678123", age:28, marital_status:"single", employment_status:"employed_temp", monthly_income:9000, tenure_months:10, overdraft_days_12m:20, avg_balance:5000 },
+  C1003: { full_name:"דוד מזרחי", national_id:"023456781", age:45, marital_status:"divorced", employment_status:"unemployed", monthly_income:4000, tenure_months:0, overdraft_days_12m:100, avg_balance:-3000 },
+  C1004: { full_name:"מרים אברהם", national_id:"056789234", age:52, marital_status:"married", employment_status:"civil_servant", monthly_income:16000, tenure_months:120, overdraft_days_12m:0, avg_balance:40000 },
+  C1005: { full_name:"אבי פרץ", national_id:"067890345", age:39, marital_status:"married", employment_status:"self_employed", monthly_income:22000, tenure_months:84, overdraft_days_12m:25, avg_balance:15000 },
   C1006: { full_name:"נועה שפירא", national_id:"078901456", age:22, marital_status:"single", employment_status:"student", monthly_income:6000, tenure_months:8 },  // ללא נתוני בנק
-  C1007: { full_name:"יעקב פרידמן", national_id:"012345678", age:68, marital_status:"widowed", employment_status:"pensioner", monthly_income:11000, overdraft_days_12m:0 },  // ללא ותק
-  C1008: { full_name:"רון גולן", national_id:"089012567", age:41, marital_status:"divorced", employment_status:"employed_permanent", monthly_income:12000, tenure_months:30, overdraft_days_12m:60 },
+  C1007: { full_name:"יעקב פרידמן", national_id:"012345678", age:68, marital_status:"widowed", employment_status:"pensioner", monthly_income:11000, overdraft_days_12m:0, avg_balance:30000 },  // ללא ותק
+  C1008: { full_name:"רון גולן", national_id:"089012567", age:41, marital_status:"divorced", employment_status:"employed_permanent", monthly_income:12000, tenure_months:30, overdraft_days_12m:60, avg_balance:2000 },
 };
 
 // ── "מרשם נתוני האשראי של בנק ישראל" — ממופתח לפי ת"ז ─────────────────────────
 const BUREAU = {
-  "034512789": { external_bureau_score:720, monthly_debt_payments:1800, missed_payments_12m:0, defaults:0, credit_utilization:0.35 },
-  "045678123": { external_bureau_score:640, monthly_debt_payments:2500, missed_payments_12m:1, defaults:0, credit_utilization:0.60 },
-  "023456781": { external_bureau_score:520, monthly_debt_payments:4500, missed_payments_12m:3, defaults:1, credit_utilization:0.95 },
-  "056789234": { external_bureau_score:780, monthly_debt_payments:1200, missed_payments_12m:0, defaults:0, credit_utilization:0.20 },
-  "067890345": { external_bureau_score:690, monthly_debt_payments:3800, missed_payments_12m:1, defaults:0, credit_utilization:0.55 },
-  "078901456": { external_bureau_score:650, monthly_debt_payments:400,  missed_payments_12m:0, defaults:0, credit_utilization:0.45 },
-  "012345678": { external_bureau_score:760, monthly_debt_payments:0,    missed_payments_12m:0, defaults:0, credit_utilization:0.10 },
-  "089012567": { external_bureau_score:560, monthly_debt_payments:3200, missed_payments_12m:4, defaults:2, credit_utilization:0.85 },
+  "034512789": { external_bureau_score:720, monthly_debt_payments:1800, missed_payments_12m:0, defaults:0, credit_utilization:0.35, oldest_account_years:8,  total_debt:45000,  hard_inquiries_6m:1 },
+  "045678123": { external_bureau_score:640, monthly_debt_payments:2500, missed_payments_12m:1, defaults:0, credit_utilization:0.60, oldest_account_years:4,  total_debt:60000,  hard_inquiries_6m:2 },
+  "023456781": { external_bureau_score:520, monthly_debt_payments:4500, missed_payments_12m:3, defaults:1, credit_utilization:0.95, oldest_account_years:12, total_debt:120000, hard_inquiries_6m:5 },
+  "056789234": { external_bureau_score:780, monthly_debt_payments:1200, missed_payments_12m:0, defaults:0, credit_utilization:0.20, oldest_account_years:20, total_debt:30000,  hard_inquiries_6m:0 },
+  "067890345": { external_bureau_score:690, monthly_debt_payments:3800, missed_payments_12m:1, defaults:0, credit_utilization:0.55, oldest_account_years:10, total_debt:90000,  hard_inquiries_6m:2 },
+  "078901456": { external_bureau_score:650, monthly_debt_payments:400,  missed_payments_12m:0, defaults:0, credit_utilization:0.45, oldest_account_years:2,  total_debt:8000,   hard_inquiries_6m:1 },
+  "012345678": { external_bureau_score:760, monthly_debt_payments:0,    missed_payments_12m:0, defaults:0, credit_utilization:0.10, oldest_account_years:30, total_debt:0,      hard_inquiries_6m:0 },
+  "089012567": { external_bureau_score:560, monthly_debt_payments:3200, missed_payments_12m:4, defaults:2, credit_utilization:0.85, oldest_account_years:9,  total_debt:75000,  hard_inquiries_6m:4 },
 };
 
 // ── מנוע הניקוד (מראה את engine.py) ──────────────────────────────────────────
@@ -181,8 +223,18 @@ function dti(rec, ctx) {
   return (mdp + ctx.amount / (ctx.term || 60)) / inc;
 }
 
+function existing_leverage(rec, ctx) {
+  const inc = rec.monthly_income;
+  if (!inc || inc <= 0) return null;
+  if (rec.total_debt === undefined || rec.total_debt === null) return null;
+  return rec.total_debt / (inc * 12);
+}
+
+// ערכים מחושבים (mirror features.py)
+const DERIVED = { dti, existing_leverage };
+
 function riskForCriterion(crit, rec, ctx) {
-  let raw = crit.source === "dti" ? dti(rec, ctx) : rec[crit.source];
+  let raw = DERIVED[crit.source] ? DERIVED[crit.source](rec, ctx) : rec[crit.source];
   if (isMissing(raw)) return { raw: null, risk: clamp(crit.missing), missing: true };
   if (crit.type === "cat") {
     const k = String(raw).toLowerCase();
@@ -205,8 +257,10 @@ function pullCreditReport(company, consent) {
   };
 }
 
-function score(company, amount, consent) {
+function score(company, amount, consent, purpose, collateral) {
   const { report, record } = pullCreditReport(company, consent);
+  record.loan_purpose = purpose;      // Conditions (request-level)
+  record.collateral = collateral;     // Collateral (request-level)
   const ctx = { amount, term: MODEL.assumptions.default_term_months };
   let total = 0;
   const breakdown = [];
@@ -245,8 +299,8 @@ function explain(company, res, amount) {
 const COLORS = { approve: "var(--approve)", review: "var(--review)", reject: "var(--reject)" };
 const riskColor = (r) => (r <= 3 ? "var(--approve)" : r <= 6 ? "var(--review)" : "var(--reject)");
 
-function render(company, id, amount, consent) {
-  const res = score(company, amount, consent);
+function render(company, id, amount, consent, purpose, collateral) {
+  const res = score(company, amount, consent, purpose, collateral);
   document.getElementById("score").textContent = res.score.toFixed(1);
   document.getElementById("rname").textContent = company.full_name;
   document.getElementById("rid").textContent = id;
@@ -292,7 +346,10 @@ for (const [id, rec] of Object.entries(COMPANY)) {
 function run() {
   const id = sel.value;
   const amount = Number(document.getElementById("amount").value) || 0;
-  render(COMPANY[id], id, amount, document.getElementById("consent").checked);
+  render(COMPANY[id], id, amount,
+    document.getElementById("consent").checked,
+    document.getElementById("purpose").value,
+    document.getElementById("collateral").value);
 }
 document.getElementById("form").addEventListener("submit", (e) => { e.preventDefault(); run(); });
 run(); // הצגת תוצאה ראשונית (יוסי · 100,000)

@@ -19,7 +19,7 @@ def service():
 def test_yossi_is_low_risk_approve(service):
     result = service.assess("יוסי", 100000)
     assert result.customer_id == "C1001"
-    assert result.score == pytest.approx(1.63, abs=0.01)
+    assert result.score == pytest.approx(2.11, abs=0.01)
     assert result.score_rounded == 2
     assert result.decision_id == "approve"
 
@@ -27,9 +27,23 @@ def test_yossi_is_low_risk_approve(service):
 def test_unemployed_high_risk_reject(service):
     result = service.assess("דוד", 100000)
     assert result.customer_id == "C1003"
-    assert result.score == pytest.approx(8.45, abs=0.01)
+    assert result.score == pytest.approx(7.73, abs=0.01)
     assert result.score_rounded == 8
     assert result.decision_id == "reject"
+
+
+def test_loan_purpose_and_collateral_affect_score(service):
+    """Request-level Conditions/Collateral inputs move the score."""
+    base = service.assess("יוסי", 100000, purpose="debt_consolidation",
+                          collateral="full_secured").score
+    # speculative purpose + no collateral is riskier than consolidation + secured
+    riskier = service.assess("יוסי", 100000, purpose="investment",
+                             collateral="unsecured").score
+    assert riskier > base
+
+    crit = next(c for c in service.assess("יוסי", 100000, purpose="investment")
+                .breakdown if c.id == "loan_purpose")
+    assert crit.risk == 9  # investment -> high risk per the model
 
 
 def test_borderline_goes_to_review(service):
@@ -61,6 +75,25 @@ def test_score_dict_is_json_serializable(service):
 
 
 # ── unit tests on the scoring primitives ─────────────────────────────────────
+def test_model_has_expanded_criteria(service):
+    """The model covers the 5 Cs — credit, capacity, capital, collateral, conditions."""
+    result = service.assess("יוסי", 100000)
+    ids = {c.id for c in result.breakdown}
+    assert {"bureau_score", "credit_history_length", "recent_inquiries",
+            "existing_leverage", "liquidity_savings", "collateral",
+            "loan_purpose"} <= ids
+    assert len(result.breakdown) == 17
+
+
+def test_existing_leverage_feature():
+    from risk_rating.features import get_feature
+    fn = get_feature("existing_leverage")
+    # total_debt 120000 / (income 4000 * 12) = 2.5
+    assert fn({"monthly_income": 4000, "total_debt": 120000}, {}) == pytest.approx(2.5)
+    assert fn({"monthly_income": 4000}, {}) is None       # unknown debt
+    assert fn({"total_debt": 50000}, {}) is None          # unknown income
+
+
 @pytest.mark.parametrize("x,expected", [
     (2.4, 2), (2.5, 3), (3.5, 4), (6.4, 6), (6.5, 7), (1.0, 1), (9.99, 10),
 ])

@@ -58,3 +58,20 @@ def debt_to_income(record: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[floa
     existing_monthly = _num(record.get("monthly_debt_payments")) or 0.0
     new_monthly = requested / term
     return (existing_monthly + new_monthly) / income
+
+
+@feature("existing_leverage")
+def existing_leverage(record: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[float]:
+    """מינוף קיים — יחס סך החוב הקיים להכנסה השנתית.
+
+    total existing debt / annual net income. A "amounts owed" / capacity
+    signal distinct from utilization (which is only revolving credit) and
+    from the new loan's DTI. Returns None if income or debt is unknown.
+    """
+    income = _num(record.get("monthly_income"))
+    if not income or income <= 0:
+        return None
+    total_debt = _num(record.get("total_debt"))
+    if total_debt is None:
+        return None
+    return total_debt / (income * 12.0)

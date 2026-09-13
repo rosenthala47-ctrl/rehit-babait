@@ -81,7 +81,8 @@ def test_assess_pulls_credit_report(service):
     assert rep["status"] == "ok"
     assert rep["bureau_score"] == 720
     assert "missed_payments_12m" in rep["fields_pulled"]
-    assert result.score == pytest.approx(1.63, abs=0.01)
+    assert "hard_inquiries_6m" in rep["fields_pulled"]
+    assert result.score == pytest.approx(2.11, abs=0.01)
 
 
 def test_bureau_score_is_a_scored_criterion(service):

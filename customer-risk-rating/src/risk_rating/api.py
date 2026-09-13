@@ -43,6 +43,8 @@ class ScoreRequest(BaseModel):
     customer: str = Field(..., description="שם הלקוח או מזהה")
     amount: float = Field(..., gt=0, description="סכום ההלוואה המבוקש")
     consent: bool = Field(True, description="הלקוח נתן הסכמה למשיכת נתוני אשראי מבנק ישראל")
+    purpose: Optional[str] = Field(None, description="מטרת ההלוואה")
+    collateral: Optional[str] = Field(None, description="בטוחה להלוואה")
     explain: bool = Field(True, description="הוספת הסבר מילולי")
     use_ai: bool = Field(False, description="שימוש ב-Claude לחוות דעת (דורש מפתח API)")
 
@@ -75,7 +77,8 @@ def customers() -> dict:
 @app.post("/api/score")
 def score(req: ScoreRequest) -> JSONResponse:
     try:
-        result = service.assess(req.customer, req.amount, consent=req.consent)
+        result = service.assess(req.customer, req.amount, consent=req.consent,
+                                purpose=req.purpose, collateral=req.collateral)
     except AmbiguousCustomer as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except CustomerNotFound as exc:

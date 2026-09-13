@@ -43,7 +43,9 @@ class RiskRatingService:
 
     def assess(self, customer_query: str, requested_amount: float,
                consent: bool = True,
-               consent_ref: Optional[str] = None) -> RiskResult:
+               consent_ref: Optional[str] = None,
+               purpose: Optional[str] = None,
+               collateral: Optional[str] = None) -> RiskResult:
         """Resolve the customer, pull their credit report, and score the request.
 
         Parameters
@@ -55,9 +57,24 @@ class RiskRatingService:
         consent_ref:
             An optional reference to the recorded consent. One is synthesized
             for the demo when consent is given and none is supplied.
+        purpose:
+            The loan purpose (Conditions), e.g. ``debt_consolidation``,
+            ``vehicle``, ``business``, ``investment`` — a request-level input.
+        collateral:
+            The security backing the loan (Collateral), e.g. ``unsecured``,
+            ``full_secured``, ``guarantor`` — a request-level input.
         """
         record = self.store.resolve_record(customer_query)
         record, report = self._pull_credit_report(record, consent, consent_ref)
+        # request-level fields (Conditions / Collateral) live on the request,
+        # not on the customer — inject them so criteria can reference them.
+        request_fields = {"requested_amount": requested_amount}
+        if purpose is not None:
+            request_fields["loan_purpose"] = purpose
+        if collateral is not None:
+            request_fields["collateral"] = collateral
+        record = {**record, **request_fields}
+
         result = self.engine.score(record, requested_amount)
         result.external_report = report
         return result
@@ -102,9 +119,11 @@ class RiskRatingService:
     # ── convenience wrappers ─────────────────────────────────────────────
     def assess_dict(self, customer_query: str, requested_amount: float,
                     consent: bool = True, use_ai: bool = False,
+                    purpose: Optional[str] = None, collateral: Optional[str] = None,
                     include_explanation: bool = True) -> Dict[str, Any]:
         """Same as :meth:`assess` but returns a JSON-friendly dict + explanation."""
-        result = self.assess(customer_query, requested_amount, consent=consent)
+        result = self.assess(customer_query, requested_amount, consent=consent,
+                             purpose=purpose, collateral=collateral)
         out: Dict[str, Any] = result.to_dict()
         if include_explanation:
             out["explanation"] = _explain(result, use_ai=use_ai)

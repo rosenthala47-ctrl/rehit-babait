@@ -97,6 +97,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="שימוש ב-Claude לחוות דעת חיתום (דורש ANTHROPIC_API_KEY)")
     p.add_argument("--no-consent", dest="consent", action="store_false", default=True,
                    help="הלקוח לא נתן הסכמה — לא תישלח בקשה למרשם האשראי של בנק ישראל")
+    p.add_argument("--purpose", default=None,
+                   help="מטרת ההלוואה (למשל debt_consolidation, vehicle, business, investment)")
+    p.add_argument("--collateral", default=None,
+                   help="בטוחה (full_secured / partial_secured / guarantor / unsecured)")
     return p
 
 
@@ -128,7 +132,8 @@ def main(argv: List[str] | None = None) -> int:
         note = "  (לא צוין סכום — משתמש בברירת מחדל 100,000)"
 
     try:
-        result = service.assess(args.customer, amount, consent=args.consent)
+        result = service.assess(args.customer, amount, consent=args.consent,
+                                purpose=args.purpose, collateral=args.collateral)
     except AmbiguousCustomer as exc:
         print(str(exc), file=sys.stderr)
         return 1
