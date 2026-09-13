@@ -46,6 +46,11 @@
     border-radius: 2px; transform: translateX(2px); box-shadow: 0 0 0 3px #fff; }
   .scale-legend { display: flex; justify-content: space-between; font-size: .78rem; color: var(--muted); }
 
+  .bureau { margin-top: 16px; padding: 10px 14px; border-radius: 10px; font-size: .9rem;
+    border: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  .bureau.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+  .bureau.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+
   h3 { margin: 24px 0 12px; font-size: 1.05rem; }
   .crit { padding: 10px 0; border-top: 1px solid var(--line); }
   .crit-top { display: flex; justify-content: space-between; gap: 10px; font-size: .92rem; }
@@ -84,6 +89,10 @@
         <input type="number" id="amount" value="100000" min="1000" step="1000" />
       </div>
       <div class="row-full checkbox">
+        <input type="checkbox" id="consent" checked />
+        <label for="consent" style="margin:0">הלקוח נתן הסכמה למשיכת נתוני אשראי ממרשם בנק ישראל</label>
+      </div>
+      <div class="row-full checkbox">
         <input type="checkbox" id="use_ai" />
         <label for="use_ai" style="margin:0">הוספת חוות דעת חיתום מבוססת-AI (Claude) — אם מוגדר מפתח API</label>
       </div>
@@ -100,6 +109,8 @@
         <div>סכום מבוקש: <b id="ramount">–</b></div>
       </div>
     </div>
+
+    <div class="bureau" id="bureau"></div>
 
     <div class="scale"><div class="marker" id="marker"></div></div>
     <div class="scale-legend">
@@ -158,6 +169,16 @@ function render(d) {
   badge.textContent = d.decision.label_he;
   badge.style.background = (DECISION[d.decision.id] || {}).color || "#334155";
 
+  const bureau = document.getElementById("bureau");
+  const rep = d.external_report;
+  if (rep && rep.status === "ok") {
+    bureau.className = "bureau ok";
+    bureau.textContent = `🏦 נתוני אשראי נשלפו ממרשם בנק ישראל · דירוג לשכה ${rep.bureau_score} · ת"ז ${rep.national_id_masked} · ${rep.retrieved_at}`;
+  } else if (rep) {
+    bureau.className = "bureau warn";
+    bureau.textContent = "🏦 " + (rep.message || "נתוני אשראי לא נשלפו");
+  } else { bureau.className = "bureau"; bureau.textContent = ""; }
+
   // RTL scale: 1 on the right, 10 on the left -> offset from the right edge.
   const pct = (d.score - 1) / 9 * 100;
   document.getElementById("marker").style.right = pct + "%";
@@ -197,6 +218,7 @@ document.getElementById("form").addEventListener("submit", async (ev) => {
     const body = {
       customer: document.getElementById("customer").value,
       amount: Number(document.getElementById("amount").value),
+      consent: document.getElementById("consent").checked,
       explain: true,
       use_ai: document.getElementById("use_ai").checked,
     };

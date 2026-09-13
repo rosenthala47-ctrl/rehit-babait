@@ -18,12 +18,16 @@ def test_loads_all_customers(store):
 
 
 def test_record_merges_all_tables(store):
-    """One customer's record must combine columns from every table."""
+    """One customer's record must combine columns from every company table.
+
+    Credit fields (missed_payments_12m etc.) are NOT here — they come from the
+    Bank of Israel register at assess time, not from the company's own tables.
+    """
     rec = store.get_record("C1001")
     assert rec["full_name"] == "יוסי כהן"          # demographics.csv
     assert rec["monthly_income"] == 18000           # employment.csv
-    assert rec["missed_payments_12m"] == 0          # credit_history.csv
     assert rec["overdraft_days_12m"] == 3           # banking.csv
+    assert "missed_payments_12m" not in rec         # comes from the credit bureau
 
 
 def test_missing_row_leaves_field_absent(store):
@@ -54,4 +58,4 @@ def test_numeric_fields_are_native_python(store):
     """Values must be native ints/floats, not numpy scalars (JSON-safe)."""
     rec = store.get_record("C1001")
     assert type(rec["monthly_income"]) in (int, float)
-    assert type(rec["credit_utilization"]) is float
+    assert type(rec["age"]) in (int, float)

@@ -6,6 +6,8 @@ decision with a full, explainable breakdown.
 """
 from __future__ import annotations
 
+from .bureau import (CreditBureauClient, CreditReport, HttpBankOfIsraelClient,
+                     MockBankOfIsraelClient, get_bureau_client)
 from .config import ScoringModel
 from .data import AmbiguousCustomer, CustomerNotFound, DataStore
 from .engine import CriterionScore, RiskEngine, RiskResult
@@ -23,6 +25,11 @@ __all__ = [
     "DataStore",
     "CustomerNotFound",
     "AmbiguousCustomer",
+    "CreditBureauClient",
+    "CreditReport",
+    "MockBankOfIsraelClient",
+    "HttpBankOfIsraelClient",
+    "get_bureau_client",
     "explain",
     "ai_available",
     "__version__",

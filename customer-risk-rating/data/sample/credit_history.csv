@@ -1,9 +1,0 @@
-customer_id,external_bureau_score,num_open_loans,total_debt,monthly_debt_payments,missed_payments_12m,defaults,credit_utilization,oldest_account_years
-C1001,720,1,45000,1800,0,0,0.35,8
-C1002,640,2,60000,2500,1,0,0.60,4
-C1003,520,3,120000,4500,3,1,0.95,12
-C1004,780,1,30000,1200,0,0,0.20,20
-C1005,690,2,90000,3800,1,0,0.55,10
-C1006,650,0,8000,400,0,0,0.45,2
-C1007,760,0,0,0,0,0,0.10,30
-C1008,560,2,75000,3200,4,2,0.85,9

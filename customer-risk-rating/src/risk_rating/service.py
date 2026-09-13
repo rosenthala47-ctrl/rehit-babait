@@ -1,16 +1,21 @@
 """שירות דירוג הסיכון — הפָּסָאד הראשי של המערכת.
 
-Ties the data layer, the scoring engine and the explanation layer together.
-This is the object the credit company's system talks to: give it a customer
-(by name or id) and a requested amount, and it pulls every table it has on
-that customer and returns a score, a decision and a full breakdown — the
-whole "AI sitting inside the system" in one call.
+Ties the data layer, the credit-bureau connector, the scoring engine and the
+explanation layer together. This is the object the credit company's system
+talks to: give it a customer (by name or id) and a requested amount, and it
+
+  1. pulls the customer's own data from the company tables,
+  2. **requests the customer's credit report from the Bank of Israel register**
+     (subject to consent), merging it in,
+  3. scores the request and returns a decision + full, explainable breakdown.
 """
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .bureau import BureauError, CreditBureauClient, get_bureau_client
 from .config import ScoringModel
 from .data import DataStore
 from .engine import RiskEngine, RiskResult
@@ -24,25 +29,82 @@ DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "sample"
 
 class RiskRatingService:
     def __init__(self, data_dir: str | Path = DEFAULT_DATA_DIR,
-                 config_path: str | Path = DEFAULT_CONFIG):
+                 config_path: str | Path = DEFAULT_CONFIG,
+                 bureau: Optional[CreditBureauClient] = None):
         self.store = DataStore.from_directory(data_dir)
         self.model = ScoringModel.load(config_path)
         self.engine = RiskEngine(self.model)
+        # the connector to the Bank of Israel credit register (mock by default)
+        self.bureau = bureau if bureau is not None else get_bureau_client()
 
     # ── queries ──────────────────────────────────────────────────────────
     def list_customers(self) -> List[Tuple[str, str]]:
         return self.store.list_customers()
 
-    def assess(self, customer_query: str, requested_amount: float) -> RiskResult:
-        """Resolve the customer, pull all their data, and score the request."""
-        record = self.store.resolve_record(customer_query)
-        return self.engine.score(record, requested_amount)
+    def assess(self, customer_query: str, requested_amount: float,
+               consent: bool = True,
+               consent_ref: Optional[str] = None) -> RiskResult:
+        """Resolve the customer, pull their credit report, and score the request.
 
+        Parameters
+        ----------
+        consent:
+            Whether the customer consented to a credit-data pull. Without
+            consent the register is **not** contacted (as the law requires);
+            the credit criteria then fall back to their missing-data risk.
+        consent_ref:
+            An optional reference to the recorded consent. One is synthesized
+            for the demo when consent is given and none is supplied.
+        """
+        record = self.store.resolve_record(customer_query)
+        record, report = self._pull_credit_report(record, consent, consent_ref)
+        result = self.engine.score(record, requested_amount)
+        result.external_report = report
+        return result
+
+    # ── credit register integration ──────────────────────────────────────
+    def _pull_credit_report(self, record: Dict[str, Any], consent: bool,
+                            consent_ref: Optional[str]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Fetch the credit report and merge it into the record.
+
+        Returns ``(merged_record, report_summary)``. The record is never
+        mutated in place.
+        """
+        national_id = record.get("national_id")
+
+        if not consent:
+            return record, {"status": "no_consent",
+                            "message": "הלקוח לא נתן הסכמה למשיכת נתוני אשראי — "
+                                       "המערכת לא פנתה לבנק ישראל."}
+        if not national_id:
+            return record, {"status": "no_national_id",
+                            "message": "אין ת\"ז ללקוח — לא ניתן לפנות למרשם האשראי."}
+
+        if not consent_ref:
+            stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+            consent_ref = f"CONSENT-{record.get('customer_id', 'NA')}-{stamp}"
+
+        try:
+            report = self.bureau.fetch(national_id, consent_ref=consent_ref)
+        except BureauError as exc:
+            return record, {"status": "error", "message": str(exc)}
+
+        if report is None:
+            return record, {"status": "not_found",
+                            "message": "הלקוח אינו רשום במרשם נתוני האשראי."}
+
+        merged = {**record, **report.as_record()}
+        summary = report.summary()
+        summary["status"] = "ok"
+        summary["fields_pulled"] = sorted(report.as_record().keys())
+        return merged, summary
+
+    # ── convenience wrappers ─────────────────────────────────────────────
     def assess_dict(self, customer_query: str, requested_amount: float,
-                    use_ai: bool = False,
+                    consent: bool = True, use_ai: bool = False,
                     include_explanation: bool = True) -> Dict[str, Any]:
         """Same as :meth:`assess` but returns a JSON-friendly dict + explanation."""
-        result = self.assess(customer_query, requested_amount)
+        result = self.assess(customer_query, requested_amount, consent=consent)
         out: Dict[str, Any] = result.to_dict()
         if include_explanation:
             out["explanation"] = _explain(result, use_ai=use_ai)

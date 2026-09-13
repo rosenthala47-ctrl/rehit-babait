@@ -42,6 +42,7 @@ service = RiskRatingService(data_dir=DATA_DIR, config_path=CONFIG_PATH)
 class ScoreRequest(BaseModel):
     customer: str = Field(..., description="שם הלקוח או מזהה")
     amount: float = Field(..., gt=0, description="סכום ההלוואה המבוקש")
+    consent: bool = Field(True, description="הלקוח נתן הסכמה למשיכת נתוני אשראי מבנק ישראל")
     explain: bool = Field(True, description="הוספת הסבר מילולי")
     use_ai: bool = Field(False, description="שימוש ב-Claude לחוות דעת (דורש מפתח API)")
 
@@ -59,6 +60,7 @@ def health() -> dict:
         "status": "ok",
         "customers": len(service.list_customers()),
         "tables": service.store.tables,
+        "credit_bureau": service.bureau.source,
         "ai_available": ai_available(),
         "model_version": service.model.version,
     }
@@ -73,7 +75,7 @@ def customers() -> dict:
 @app.post("/api/score")
 def score(req: ScoreRequest) -> JSONResponse:
     try:
-        result = service.assess(req.customer, req.amount)
+        result = service.assess(req.customer, req.amount, consent=req.consent)
     except AmbiguousCustomer as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except CustomerNotFound as exc:

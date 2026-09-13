@@ -35,6 +35,17 @@ def _fmt_value(cs) -> str:
     return str(val)
 
 
+def _bureau_line(report) -> str:
+    if not report:
+        return ""
+    if report.get("status") == "ok":
+        score = report.get("bureau_score")
+        score_txt = f"דירוג לשכה {score:.0f}" if isinstance(score, (int, float)) else "נשלף"
+        return (f"מרשם אשראי:  ✓ בנק ישראל · {score_txt} · "
+                f"ת\"ז {report.get('national_id_masked', '')} · {report.get('retrieved_at', '')}")
+    return f"מרשם אשראי:  ⚠ {report.get('message', 'לא נשלף')}"
+
+
 def format_report(result: RiskResult) -> str:
     icon = _DECISION_ICON.get(result.decision_id, "•")
     width = 60
@@ -47,6 +58,9 @@ def format_report(result: RiskResult) -> str:
     out.append(dline)
     out.append(f"לקוח:        {result.full_name}  ({result.customer_id})")
     out.append(f"סכום מבוקש:  {_fmt_amount(result.requested_amount, result.currency)}")
+    bureau = _bureau_line(result.external_report)
+    if bureau:
+        out.append(bureau)
     out.append(line)
     out.append(f"ציון סיכון:  {result.score:.1f} / 10   (מעוגל: {result.score_rounded})")
     out.append(f"החלטה:       {icon}  {result.decision_label_he}")
@@ -81,6 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="הוספת הסבר מילולי להחלטה")
     p.add_argument("--ai", action="store_true",
                    help="שימוש ב-Claude לחוות דעת חיתום (דורש ANTHROPIC_API_KEY)")
+    p.add_argument("--no-consent", dest="consent", action="store_false", default=True,
+                   help="הלקוח לא נתן הסכמה — לא תישלח בקשה למרשם האשראי של בנק ישראל")
     return p
 
 
@@ -112,7 +128,7 @@ def main(argv: List[str] | None = None) -> int:
         note = "  (לא צוין סכום — משתמש בברירת מחדל 100,000)"
 
     try:
-        result = service.assess(args.customer, amount)
+        result = service.assess(args.customer, amount, consent=args.consent)
     except AmbiguousCustomer as exc:
         print(str(exc), file=sys.stderr)
         return 1

@@ -25,6 +25,8 @@
   label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
   select, input[type=number] { width: 100%; padding: 11px 12px; font-size: 1rem;
     border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+  .checkbox { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .9rem; }
+  .checkbox input { width: 18px; height: 18px; }
   button { grid-column: 1 / -1; padding: 13px; font-size: 1.05rem; font-weight: 600;
     color: #fff; background: var(--brand); border: 0; border-radius: 10px; cursor: pointer; }
   button:hover { background: var(--brand-ink); }
@@ -34,7 +36,11 @@
   .badge { padding: 8px 16px; border-radius: 999px; font-weight: 700; color: #fff; font-size: 1.05rem; }
   .meta { color: var(--muted); font-size: .95rem; margin-inline-start: auto; text-align: start; }
   .meta b { color: var(--ink); }
-  .scale { position: relative; height: 14px; border-radius: 999px; margin: 22px 0 8px;
+  .bureau { margin-top: 16px; padding: 10px 14px; border-radius: 10px; font-size: .9rem;
+    border: 1px solid var(--line); }
+  .bureau.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+  .bureau.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+  .scale { position: relative; height: 14px; border-radius: 999px; margin: 18px 0 8px;
     background: linear-gradient(90deg, var(--approve) 0 30%, var(--review) 30% 60%, var(--reject) 60% 100%); }
   .marker { position: absolute; top: -6px; width: 4px; height: 26px; background: #0f172a;
     border-radius: 2px; box-shadow: 0 0 0 3px #fff; }
@@ -59,7 +65,7 @@
 <div class="wrap">
   <header>
     <h1>דירוג סיכון לקוח 🛡️</h1>
-    <p>המערכת שואבת את כל נתוני הלקוח ומחזירה ציון סיכון והחלטה — תוך שנייה.</p>
+    <p>המערכת שואבת את נתוני הלקוח, שולפת את דירוג האשראי ממרשם בנק ישראל, ומחזירה ציון והחלטה — תוך שנייה.</p>
     <span class="tag">הדגמה · כל החישוב מתבצע בדפדפן · נתונים לדוגמה בלבד</span>
   </header>
 
@@ -72,6 +78,10 @@
       <div>
         <label for="amount">סכום ההלוואה המבוקש (₪)</label>
         <input type="number" id="amount" value="100000" min="1000" step="1000" />
+      </div>
+      <div class="checkbox">
+        <input type="checkbox" id="consent" checked />
+        <label for="consent" style="margin:0">הלקוח נתן הסכמה למשיכת נתוני אשראי ממרשם בנק ישראל</label>
       </div>
       <button type="submit">חשב דירוג סיכון</button>
     </form>
@@ -86,6 +96,7 @@
         <div>סכום מבוקש: <b id="ramount">–</b></div>
       </div>
     </div>
+    <div class="bureau" id="bureau"></div>
     <div class="scale"><div class="marker" id="marker"></div></div>
     <div class="scale-legend">
       <span>סיכון גבוה · 10</span><span>6</span><span>3</span><span>1 · סיכון נמוך</span>
@@ -101,7 +112,7 @@
 <script>
 // ── מודל הניקוד (מראה את config/scoring_model.yaml) ─────────────────────────
 const MODEL = {
-  assumptions: { default_term_months: 60, currency: "ILS" },
+  assumptions: { default_term_months: 60 },
   decision_bands: [
     { id: "approve", min: 1, max: 3, label: "אישור", action: "אישור ההלוואה בתנאים הרגילים." },
     { id: "review",  min: 4, max: 6, label: "בדיקה ידנית / אישור חלקי", action: "העברה לחתם אנושי; לשקול סכום מופחת, ערב או בטוחה." },
@@ -131,30 +142,41 @@ const MODEL = {
   ],
 };
 
-// ── נתוני לקוחות לדוגמה (ממוזגים מכל הטבלאות) ────────────────────────────────
-// שדה חסר בכוונה מדגים את הטיפול בנתונים חלקיים (נועה — ללא נתוני בנק; יעקב — ללא ותק).
-const CUSTOMERS = {
-  C1001: { full_name:"יוסי כהן", age:34, marital_status:"married", employment_status:"employed_permanent", monthly_income:18000, tenure_months:40, missed_payments_12m:0, defaults:0, credit_utilization:0.35, overdraft_days_12m:3, monthly_debt_payments:1800 },
-  C1002: { full_name:"שרה לוי", age:28, marital_status:"single", employment_status:"employed_temp", monthly_income:9000, tenure_months:10, missed_payments_12m:1, defaults:0, credit_utilization:0.60, overdraft_days_12m:20, monthly_debt_payments:2500 },
-  C1003: { full_name:"דוד מזרחי", age:45, marital_status:"divorced", employment_status:"unemployed", monthly_income:4000, tenure_months:0, missed_payments_12m:3, defaults:1, credit_utilization:0.95, overdraft_days_12m:100, monthly_debt_payments:4500 },
-  C1004: { full_name:"מרים אברהם", age:52, marital_status:"married", employment_status:"civil_servant", monthly_income:16000, tenure_months:120, missed_payments_12m:0, defaults:0, credit_utilization:0.20, overdraft_days_12m:0, monthly_debt_payments:1200 },
-  C1005: { full_name:"אבי פרץ", age:39, marital_status:"married", employment_status:"self_employed", monthly_income:22000, tenure_months:84, missed_payments_12m:1, defaults:0, credit_utilization:0.55, overdraft_days_12m:25, monthly_debt_payments:3800 },
-  C1006: { full_name:"נועה שפירא", age:22, marital_status:"single", employment_status:"student", monthly_income:6000, tenure_months:8, missed_payments_12m:0, defaults:0, credit_utilization:0.45, monthly_debt_payments:400 },
-  C1007: { full_name:"יעקב פרידמן", age:68, marital_status:"widowed", employment_status:"pensioner", monthly_income:11000, missed_payments_12m:0, defaults:0, credit_utilization:0.10, overdraft_days_12m:0, monthly_debt_payments:0 },
-  C1008: { full_name:"רון גולן", age:41, marital_status:"divorced", employment_status:"employed_permanent", monthly_income:12000, tenure_months:30, missed_payments_12m:4, defaults:2, credit_utilization:0.85, overdraft_days_12m:60, monthly_debt_payments:3200 },
+// ── נתוני החברה עצמה (דמוגרפיה, תעסוקה, בנק) — ללא נתוני אשראי ────────────────
+const COMPANY = {
+  C1001: { full_name:"יוסי כהן", national_id:"034512789", age:34, marital_status:"married", employment_status:"employed_permanent", monthly_income:18000, tenure_months:40, overdraft_days_12m:3 },
+  C1002: { full_name:"שרה לוי", national_id:"045678123", age:28, marital_status:"single", employment_status:"employed_temp", monthly_income:9000, tenure_months:10, overdraft_days_12m:20 },
+  C1003: { full_name:"דוד מזרחי", national_id:"023456781", age:45, marital_status:"divorced", employment_status:"unemployed", monthly_income:4000, tenure_months:0, overdraft_days_12m:100 },
+  C1004: { full_name:"מרים אברהם", national_id:"056789234", age:52, marital_status:"married", employment_status:"civil_servant", monthly_income:16000, tenure_months:120, overdraft_days_12m:0 },
+  C1005: { full_name:"אבי פרץ", national_id:"067890345", age:39, marital_status:"married", employment_status:"self_employed", monthly_income:22000, tenure_months:84, overdraft_days_12m:25 },
+  C1006: { full_name:"נועה שפירא", national_id:"078901456", age:22, marital_status:"single", employment_status:"student", monthly_income:6000, tenure_months:8 },  // ללא נתוני בנק
+  C1007: { full_name:"יעקב פרידמן", national_id:"012345678", age:68, marital_status:"widowed", employment_status:"pensioner", monthly_income:11000, overdraft_days_12m:0 },  // ללא ותק
+  C1008: { full_name:"רון גולן", national_id:"089012567", age:41, marital_status:"divorced", employment_status:"employed_permanent", monthly_income:12000, tenure_months:30, overdraft_days_12m:60 },
+};
+
+// ── "מרשם נתוני האשראי של בנק ישראל" — ממופתח לפי ת"ז ─────────────────────────
+const BUREAU = {
+  "034512789": { external_bureau_score:720, monthly_debt_payments:1800, missed_payments_12m:0, defaults:0, credit_utilization:0.35 },
+  "045678123": { external_bureau_score:640, monthly_debt_payments:2500, missed_payments_12m:1, defaults:0, credit_utilization:0.60 },
+  "023456781": { external_bureau_score:520, monthly_debt_payments:4500, missed_payments_12m:3, defaults:1, credit_utilization:0.95 },
+  "056789234": { external_bureau_score:780, monthly_debt_payments:1200, missed_payments_12m:0, defaults:0, credit_utilization:0.20 },
+  "067890345": { external_bureau_score:690, monthly_debt_payments:3800, missed_payments_12m:1, defaults:0, credit_utilization:0.55 },
+  "078901456": { external_bureau_score:650, monthly_debt_payments:400,  missed_payments_12m:0, defaults:0, credit_utilization:0.45 },
+  "012345678": { external_bureau_score:760, monthly_debt_payments:0,    missed_payments_12m:0, defaults:0, credit_utilization:0.10 },
+  "089012567": { external_bureau_score:560, monthly_debt_payments:3200, missed_payments_12m:4, defaults:2, credit_utilization:0.85 },
 };
 
 // ── מנוע הניקוד (מראה את engine.py) ──────────────────────────────────────────
 const clamp = (r) => Math.max(1, Math.min(10, r));
 const isMissing = (v) => v === undefined || v === null || v === "";
 const roundHalfUp = (x) => Math.floor(x + 0.5);
+const canonId = (nid) => String(nid).padStart(9, "0");
 
 function dti(rec, ctx) {
   const inc = rec.monthly_income;
   if (!inc || inc <= 0) return null;
-  const term = ctx.term || 60;
   const mdp = rec.monthly_debt_payments || 0;
-  return (mdp + ctx.amount / term) / inc;
+  return (mdp + ctx.amount / (ctx.term || 60)) / inc;
 }
 
 function riskForCriterion(crit, rec, ctx) {
@@ -162,20 +184,32 @@ function riskForCriterion(crit, rec, ctx) {
   if (isMissing(raw)) return { raw: null, risk: clamp(crit.missing), missing: true };
   if (crit.type === "cat") {
     const k = String(raw).toLowerCase();
-    const r = (k in crit.mapping) ? crit.mapping[k] : crit.unknown;
-    return { raw, risk: clamp(r), missing: false };
+    return { raw, risk: clamp((k in crit.mapping) ? crit.mapping[k] : crit.unknown), missing: false };
   }
   const val = Number(raw);
   for (const [mx, rk] of crit.bands) if (val <= mx) return { raw, risk: clamp(rk), missing: false };
   return { raw, risk: clamp(crit.bands[crit.bands.length - 1][1]), missing: false };
 }
 
-function score(rec, amount) {
+// שולף את דירוג האשראי ממרשם בנק ישראל (בכפוף להסכמה) וממזג לרשומה
+function pullCreditReport(company, consent) {
+  if (!consent) return { report: { status: "no_consent", message: "הלקוח לא נתן הסכמה — לא נשלחה בקשה לבנק ישראל." }, record: { ...company } };
+  const nid = canonId(company.national_id);
+  const row = BUREAU[nid];
+  if (!row) return { report: { status: "not_found", message: "הלקוח אינו רשום במרשם נתוני האשראי." }, record: { ...company } };
+  return {
+    report: { status: "ok", bureau_score: row.external_bureau_score, national_id_masked: "•••••" + nid.slice(-4), retrieved_at: new Date().toISOString().slice(0, 19) + "Z" },
+    record: { ...company, ...row },
+  };
+}
+
+function score(company, amount, consent) {
+  const { report, record } = pullCreditReport(company, consent);
   const ctx = { amount, term: MODEL.assumptions.default_term_months };
   let total = 0;
   const breakdown = [];
   for (const crit of MODEL.criteria) {
-    const { raw, risk, missing } = riskForCriterion(crit, rec, ctx);
+    const { raw, risk, missing } = riskForCriterion(crit, record, ctx);
     const contribution = crit.weight * risk;
     total += contribution;
     breakdown.push({ id: crit.id, label: crit.label, weight: crit.weight, raw, risk, contribution, missing });
@@ -183,31 +217,24 @@ function score(rec, amount) {
   total = clamp(total);
   const rounded = clamp(roundHalfUp(total));
   const band = MODEL.decision_bands.find((b) => rounded >= b.min && rounded <= b.max);
-  return { score: total, rounded, band, breakdown };
+  return { score: total, rounded, band, breakdown, report };
 }
 
 // ── הסבר מילולי (מראה את explain.py) ────────────────────────────────────────
 const fmtRaw = (v) => (typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(2)) : String(v));
 const fmtAmount = (n) => Number(n).toLocaleString("he-IL") + " ₪";
 
-function explain(rec, res, amount) {
+function explain(company, res, amount) {
   const lines = [];
-  lines.push(`הלקוח ${rec.full_name} ביקש הלוואה בסך ${fmtAmount(amount)}. ` +
+  lines.push(`הלקוח ${company.full_name} ביקש הלוואה בסך ${fmtAmount(amount)}. ` +
     `ציון הסיכון שחושב הוא ${res.score.toFixed(1)} מתוך 10 (מעוגל ל-${res.rounded}) — ההמלצה: ${res.band.label}.`);
-
   const drivers = [...res.breakdown].filter((c) => c.risk >= 5).sort((a, b) => b.contribution - a.contribution).slice(0, 3);
-  if (drivers.length) {
-    lines.push("גורמי הסיכון המרכזיים: " + drivers.map((c) =>
-      `${c.label} (ערך: ${c.missing ? "חסר נתון" : fmtRaw(c.raw)}, תת-ציון ${c.risk}/10)`).join("; ") + ".");
-  }
+  if (drivers.length) lines.push("גורמי הסיכון המרכזיים: " + drivers.map((c) =>
+    `${c.label} (ערך: ${c.missing ? "חסר נתון" : fmtRaw(c.raw)}, תת-ציון ${c.risk}/10)`).join("; ") + ".");
   const mitig = [...res.breakdown].filter((c) => c.risk <= 3 && !c.missing).sort((a, b) => b.weight - a.weight).slice(0, 3);
-  if (mitig.length) {
-    lines.push("גורמים ממתנים לטובת הלקוח: " + mitig.map((c) => `${c.label} (תת-ציון ${c.risk}/10)`).join("; ") + ".");
-  }
+  if (mitig.length) lines.push("גורמים ממתנים לטובת הלקוח: " + mitig.map((c) => `${c.label} (תת-ציון ${c.risk}/10)`).join("; ") + ".");
   const missing = res.breakdown.filter((c) => c.missing).map((c) => c.label);
-  if (missing.length) {
-    lines.push("שים לב — חסרים נתונים בקריטריונים הבאים, ולכן שוקללה הערכת סיכון ברירת-מחדל: " + missing.join(", ") + ".");
-  }
+  if (missing.length) lines.push("שים לב — חסרים נתונים בקריטריונים הבאים, ולכן שוקללה הערכת סיכון ברירת-מחדל: " + missing.join(", ") + ".");
   lines.push("פעולה מומלצת: " + res.band.action);
   return lines.join("\n");
 }
@@ -216,16 +243,25 @@ function explain(rec, res, amount) {
 const COLORS = { approve: "var(--approve)", review: "var(--review)", reject: "var(--reject)" };
 const riskColor = (r) => (r <= 3 ? "var(--approve)" : r <= 6 ? "var(--review)" : "var(--reject)");
 
-function render(rec, id, amount) {
-  const res = score(rec, amount);
+function render(company, id, amount, consent) {
+  const res = score(company, amount, consent);
   document.getElementById("score").textContent = res.score.toFixed(1);
-  document.getElementById("rname").textContent = rec.full_name;
+  document.getElementById("rname").textContent = company.full_name;
   document.getElementById("rid").textContent = id;
   document.getElementById("ramount").textContent = fmtAmount(amount);
   const badge = document.getElementById("badge");
   badge.textContent = res.band.label;
   badge.style.background = COLORS[res.band.id];
   document.getElementById("marker").style.right = ((res.score - 1) / 9 * 100) + "%";
+
+  const bureau = document.getElementById("bureau");
+  if (res.report.status === "ok") {
+    bureau.className = "bureau ok";
+    bureau.textContent = `🏦 נתוני אשראי נשלפו ממרשם בנק ישראל · דירוג לשכה ${res.report.bureau_score} · ת"ז ${res.report.national_id_masked} · ${res.report.retrieved_at}`;
+  } else {
+    bureau.className = "bureau warn";
+    bureau.textContent = "🏦 " + res.report.message;
+  }
 
   const bd = document.getElementById("breakdown");
   bd.innerHTML = "";
@@ -241,12 +277,12 @@ function render(rec, id, amount) {
         <span>תרומה לסיכון: ${c.contribution.toFixed(2)}</span></div>`;
     bd.appendChild(div);
   }
-  document.getElementById("explainText").textContent = explain(rec, res, amount);
+  document.getElementById("explainText").textContent = explain(company, res, amount);
 }
 
 // ── אתחול ────────────────────────────────────────────────────────────────────
 const sel = document.getElementById("customer");
-for (const [id, rec] of Object.entries(CUSTOMERS)) {
+for (const [id, rec] of Object.entries(COMPANY)) {
   const o = document.createElement("option");
   o.value = id; o.textContent = `${rec.full_name} (${id})`;
   sel.appendChild(o);
@@ -254,7 +290,7 @@ for (const [id, rec] of Object.entries(CUSTOMERS)) {
 function run() {
   const id = sel.value;
   const amount = Number(document.getElementById("amount").value) || 0;
-  render(CUSTOMERS[id], id, amount);
+  render(COMPANY[id], id, amount, document.getElementById("consent").checked);
 }
 document.getElementById("form").addEventListener("submit", (e) => { e.preventDefault(); run(); });
 run(); // הצגת תוצאה ראשונית (יוסי · 100,000)
