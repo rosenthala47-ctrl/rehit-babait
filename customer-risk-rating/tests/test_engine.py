@@ -19,7 +19,7 @@ def service():
 def test_yossi_is_low_risk_approve(service):
     result = service.assess("יוסי", 100000)
     assert result.customer_id == "C1001"
-    assert result.score == pytest.approx(1.57, abs=0.01)
+    assert result.score == pytest.approx(1.63, abs=0.01)
     assert result.score_rounded == 2
     assert result.decision_id == "approve"
 
@@ -27,7 +27,7 @@ def test_yossi_is_low_risk_approve(service):
 def test_unemployed_high_risk_reject(service):
     result = service.assess("דוד", 100000)
     assert result.customer_id == "C1003"
-    assert result.score == pytest.approx(8.48, abs=0.01)
+    assert result.score == pytest.approx(8.45, abs=0.01)
     assert result.score_rounded == 8
     assert result.decision_id == "reject"
 

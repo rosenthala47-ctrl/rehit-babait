@@ -81,8 +81,22 @@ def test_assess_pulls_credit_report(service):
     assert rep["status"] == "ok"
     assert rep["bureau_score"] == 720
     assert "missed_payments_12m" in rep["fields_pulled"]
-    # score is unchanged vs. the original (bureau supplies the same numbers)
-    assert result.score == pytest.approx(1.57, abs=0.01)
+    assert result.score == pytest.approx(1.63, abs=0.01)
+
+
+def test_bureau_score_is_a_scored_criterion(service):
+    """The external credit score itself feeds a scoring criterion."""
+    with_consent = service.assess("יוסי", 100000, consent=True)
+    crit = next(c for c in with_consent.breakdown if c.id == "bureau_score")
+    assert crit.raw_value == 720        # pulled from the register
+    assert crit.risk == 2               # 720 -> low risk band
+    assert crit.missing is False
+
+    # without a bureau pull, the criterion falls back to missing-data risk
+    without = service.assess("יוסי", 100000, consent=False)
+    crit2 = next(c for c in without.breakdown if c.id == "bureau_score")
+    assert crit2.missing is True
+    assert crit2.risk == 7              # missing_risk for bureau_score
 
 
 def test_no_consent_skips_bureau_and_raises_risk(service):

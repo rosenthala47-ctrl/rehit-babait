@@ -56,10 +56,26 @@ decision_bands:
 # ─────────────────────────────────────────────────────────────────────────────
 criteria:
 
+  - id: bureau_score
+    label_he: "דירוג אשראי (לשכת נתוני אשראי / בנק ישראל)"
+    label_en: "External credit score (Bank of Israel register)"
+    weight: 0.15
+    source: external_bureau_score
+    type: numeric_bands
+    # דירוג גבוה = סיכון נמוך. סקאלה ~300–850.
+    bands:
+      - {max: 500,  risk: 10}
+      - {max: 580,  risk: 8}
+      - {max: 640,  risk: 6}
+      - {max: 700,  risk: 4}
+      - {max: 760,  risk: 2}
+      - {max: .inf, risk: 1}
+    missing_risk: 7
+
   - id: employment_status
     label_he: "מצב תעסוקתי"
     label_en: "Employment status"
-    weight: 0.15
+    weight: 0.13
     source: employment_status
     type: categorical
     mapping:
@@ -76,7 +92,7 @@ criteria:
   - id: income_level
     label_he: "רמת הכנסה חודשית (נטו)"
     label_en: "Monthly net income"
-    weight: 0.12
+    weight: 0.10
     source: monthly_income
     type: numeric_bands
     bands:
@@ -92,7 +108,7 @@ criteria:
   - id: affordability
     label_he: "יכולת החזר (DTI) כולל ההלוואה המבוקשת"
     label_en: "Debt-to-income incl. requested loan"
-    weight: 0.20
+    weight: 0.18
     source: "derived:dti"
     type: numeric_bands
     bands:
@@ -107,7 +123,7 @@ criteria:
   - id: payment_history
     label_he: "היסטוריית תשלומים (פיגורים ב-12 החודשים האחרונים)"
     label_en: "Missed payments (last 12m)"
-    weight: 0.15
+    weight: 0.12
     source: missed_payments_12m
     type: numeric_bands
     bands:
@@ -121,7 +137,7 @@ criteria:
   - id: defaults
     label_he: "כשלי אשראי / הליכי הוצאה לפועל"
     label_en: "Defaults / collections"
-    weight: 0.10
+    weight: 0.08
     source: defaults
     type: numeric_bands
     bands:
@@ -133,7 +149,7 @@ criteria:
   - id: credit_utilization
     label_he: "ניצול מסגרות אשראי"
     label_en: "Credit utilization"
-    weight: 0.08
+    weight: 0.06
     source: credit_utilization
     type: numeric_bands
     bands:
@@ -147,7 +163,7 @@ criteria:
   - id: employment_tenure
     label_he: "ותק במקום העבודה (חודשים)"
     label_en: "Job tenure (months)"
-    weight: 0.07
+    weight: 0.06
     source: tenure_months
     type: numeric_bands
     bands:
@@ -162,7 +178,7 @@ criteria:
   - id: age
     label_he: "גיל"
     label_en: "Age"
-    weight: 0.05
+    weight: 0.04
     source: age
     type: numeric_bands
     bands:
