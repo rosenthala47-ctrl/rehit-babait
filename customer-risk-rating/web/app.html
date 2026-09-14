@@ -52,6 +52,11 @@
   .bureau.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
   .bureau.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 
+  .knockout { margin-top: 16px; padding: 14px 16px; border-radius: 12px; font-size: .95rem; display: none;
+    background: #fef2f2; border: 2px solid #dc2626; color: #991b1b; }
+  .knockout.on { display: block; }
+  .knockout .ko-title { font-weight: 800; margin-bottom: 6px; font-size: 1.02rem; }
+  .knockout ul { margin: 6px 0 0; padding-inline-start: 20px; }
   .override { margin-top: 16px; padding: 14px 16px; border-radius: 12px; font-size: .95rem; display: none; }
   .override.on { display: block; background: #fef2f2; border: 2px solid #dc2626; color: #991b1b; }
   .override.blocked { display: block; background: #f8fafc; border: 1px dashed #94a3b8; color: #475569; font-size: .9rem; }
@@ -148,6 +153,7 @@
     </div>
 
     <div class="bureau" id="bureau"></div>
+    <div class="knockout" id="knockout"></div>
     <div class="override" id="override"></div>
 
     <div class="scale"><div class="marker" id="marker"></div></div>
@@ -218,6 +224,18 @@ function render(d) {
     bureau.className = "bureau warn";
     bureau.textContent = "🏦 " + (rep.message || "נתוני אשראי לא נשלפו");
   } else { bureau.className = "bureau"; bureau.textContent = ""; }
+
+  // knockout — hard auto-reject, shown in RED
+  const ko = document.getElementById("knockout");
+  ko.innerHTML = "";
+  if (d.knockouts && d.knockouts.length) {
+    ko.className = "knockout on";
+    const t = document.createElement("div"); t.className = "ko-title";
+    t.textContent = "⛔ נדחה עקב כלל נוק-אאוט — דחייה מוחלטת, ללא תלות בציון";
+    const ul = document.createElement("ul");
+    for (const k of d.knockouts) { const li = document.createElement("li"); li.textContent = k.label_he; ul.appendChild(li); }
+    ko.append(t, ul);
+  } else { ko.className = "knockout"; }
 
   // discretionary second-look override — shown in RED
   const adj = d.adjudication;

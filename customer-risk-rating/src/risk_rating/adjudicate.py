@@ -239,15 +239,23 @@ def _ai(result: RiskResult, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def adjudicate(result: RiskResult, record: Dict[str, Any], model,
                use_ai: bool = False) -> Adjudication:
     """Run a discretionary second look over a scored result."""
-    blocks = _hard_blocks(result, record)
+    # A knockout is an absolute reject — the discretionary layer cannot touch it.
+    knockout_reasons = [k["label_he"] for k in result.knockouts]
+    hard = _hard_blocks(result, record)
+    blocks = knockout_reasons + [b for b in hard if b not in knockout_reasons]
     if blocks:
+        if knockout_reasons:
+            rationale = ("דחייה מוחלטת עקב כלל נוק-אאוט — שיקול הדעת אינו רשאי "
+                         "לבטל זאת: " + "; ".join(blocks) + ".")
+        else:
+            rationale = ("נבחנה אפשרות לחריגה — נחסמה על ידי מעקות הבטיחות: "
+                         + "; ".join(blocks) + ".")
         return Adjudication(
             reviewed=True, is_override=False,
             model_decision=result.decision_id, final_decision=result.decision_id,
             final_label_he=_band_label(model, result.decision_id),
             early_career_exception=False, confidence="high",
-            rationale_he="נבחנה אפשרות לחריגה — נחסמה על ידי מעקות הבטיחות: "
-                         + "; ".join(blocks) + ".",
+            rationale_he=rationale,
             conditions_he="", blocked_reasons=blocks, source="guardrail",
         )
 

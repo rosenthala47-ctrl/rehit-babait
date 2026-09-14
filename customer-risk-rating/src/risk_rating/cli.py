@@ -135,6 +135,12 @@ def format_report(result: RiskResult) -> str:
     out.append(f"ציון סיכון:  {result.score:.1f} / 10   (מעוגל: {result.score_rounded})")
     out.append(f"החלטה:       {icon}  {result.decision_label_he}")
     out.append(f"פעולה:       {result.decision_action_he}")
+    if result.knockouts:
+        out.append(line)
+        out.append(f"{_RED}{_BOLD}⛔ נדחה עקב כלל נוק-אאוט (דחייה מוחלטת, "
+                   f"ללא תלות בציון):{_RESET}")
+        for k in result.knockouts:
+            out.append(f"{_RED}   • {k['label_he']}{_RESET}")
     out.append(line)
     out.append("פירוט לפי קריטריון (ממוין לפי תרומה לסיכון):")
     for cs in sorted(result.breakdown, key=lambda c: c.contribution, reverse=True):

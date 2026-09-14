@@ -39,7 +39,7 @@ DEFAULT_REGISTER = PROJECT_ROOT / "data" / "bureau" / "credit_register.csv"
 _REGISTER_FIELDS = (
     "bureau_score", "num_open_loans", "total_debt", "monthly_debt_payments",
     "missed_payments_12m", "defaults", "credit_utilization", "oldest_account_years",
-    "hard_inquiries_6m",
+    "hard_inquiries_6m", "restricted_account", "bankruptcy",
 )
 
 
@@ -87,6 +87,8 @@ class CreditReport:
     credit_utilization: Optional[float] = None
     oldest_account_years: Optional[float] = None
     hard_inquiries_6m: Optional[float] = None
+    restricted_account: Optional[float] = None    # חשבון מוגבל (0/1)
+    bankruptcy: Optional[float] = None            # פשיטת רגל / כונס (0/1)
     source: str = "mock"
     retrieved_at: str = ""
     consent_ref: Optional[str] = None
@@ -107,6 +109,8 @@ class CreditReport:
             "credit_utilization": self.credit_utilization,
             "oldest_account_years": self.oldest_account_years,
             "hard_inquiries_6m": self.hard_inquiries_6m,
+            "restricted_account": self.restricted_account,
+            "bankruptcy": self.bankruptcy,
         }
         return {k: v for k, v in mapping.items() if v is not None}
 

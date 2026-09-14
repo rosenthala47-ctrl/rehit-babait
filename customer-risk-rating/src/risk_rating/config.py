@@ -71,6 +71,53 @@ class DecisionBand:
     action_he: str = ""
 
 
+def _rule_missing(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    if isinstance(value, str) and value.strip() == "":
+        return True
+    return False
+
+
+@dataclass
+class KnockoutRule:
+    """A hard auto-reject condition, independent of the weighted score.
+
+    When a rule fires the request is rejected outright ("נדחה עקב כלל
+    נוק-אאוט") and the discretionary (AI) layer may not overturn it. A rule
+    only fires when the field is actually present — a missing value never
+    triggers a knockout.
+    """
+
+    id: str
+    label_he: str
+    field: str
+    label_en: str = ""
+    gte: Optional[float] = None
+    lte: Optional[float] = None
+    equals: List[str] = field(default_factory=list)
+
+    def triggered(self, record: Dict[str, Any]) -> bool:
+        raw = record.get(self.field)
+        if _rule_missing(raw):
+            return False
+        if self.gte is not None or self.lte is not None:
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                return False
+            if self.gte is not None and value < self.gte:
+                return False
+            if self.lte is not None and value > self.lte:
+                return False
+        if self.equals and str(raw).strip().lower() not in self.equals:
+            return False
+        # at least one condition must be defined for the rule to mean anything
+        return self.gte is not None or self.lte is not None or bool(self.equals)
+
+
 @dataclass
 class ScoringModel:
     version: int
@@ -79,6 +126,7 @@ class ScoringModel:
     assumptions: Dict[str, Any]
     decision_bands: List[DecisionBand]
     criteria: List[Criterion]
+    knockout_rules: List[KnockoutRule] = field(default_factory=list)
 
     # ── loading ──────────────────────────────────────────────────────────
     @classmethod
@@ -119,6 +167,18 @@ class ScoringModel:
             )
             for d in raw.get("decision_bands", [])
         ]
+        knockout_rules = [
+            KnockoutRule(
+                id=k["id"],
+                label_he=k.get("label_he", k["id"]),
+                label_en=k.get("label_en", ""),
+                field=k["field"],
+                gte=_to_float(k["gte"]) if k.get("gte") is not None else None,
+                lte=_to_float(k["lte"]) if k.get("lte") is not None else None,
+                equals=[str(v).strip().lower() for v in (k.get("equals") or [])],
+            )
+            for k in raw.get("knockout_rules", [])
+        ]
         model = cls(
             version=int(raw.get("version", 1)),
             scale_min=int(scale.get("min", 1)),
@@ -126,6 +186,7 @@ class ScoringModel:
             assumptions=raw.get("assumptions", {}) or {},
             decision_bands=decision_bands,
             criteria=criteria,
+            knockout_rules=knockout_rules,
         )
         model.validate(raise_on_error=True)
         return model
@@ -156,9 +217,25 @@ class ScoringModel:
         if not self.decision_bands:
             raise ValueError("scoring model has no decision_bands")
 
+        for r in self.knockout_rules:
+            if r.gte is None and r.lte is None and not r.equals:
+                raise ValueError(
+                    f"knockout rule '{r.id}' has no condition (gte/lte/equals)")
+
         return warnings
 
     # ── helpers ──────────────────────────────────────────────────────────
+    def check_knockouts(self, record: Dict[str, Any]) -> List[KnockoutRule]:
+        """Return every knockout rule that fires for this (merged) record."""
+        return [r for r in self.knockout_rules if r.triggered(record)]
+
+    def reject_band(self) -> Optional[DecisionBand]:
+        """The 'reject' decision band, if the model defines one."""
+        for b in self.decision_bands:
+            if b.id == "reject":
+                return b
+        return self.decision_bands[-1] if self.decision_bands else None
+
     def band_for(self, score_int: int) -> DecisionBand:
         """Return the decision band that contains the given (rounded) score."""
         for band in self.decision_bands:

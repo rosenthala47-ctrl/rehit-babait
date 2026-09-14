@@ -47,6 +47,12 @@ def template_explanation(result: RiskResult) -> str:
         f"(מעוגל ל-{result.score_rounded}) — ההמלצה: {result.decision_label_he}."
     )
 
+    if result.knockouts:
+        reasons = "; ".join(k["label_he"] for k in result.knockouts)
+        lines.append(
+            "⛔ נדחה עקב כלל נוק-אאוט — תנאי דחייה מוחלט שאינו תלוי בציון: "
+            + reasons + ". (שכבת שיקול הדעת אינה רשאית לבטל דחייה זו.)")
+
     drivers = [c for c in result.top_risk_drivers(3) if c.risk >= 5]
     if drivers:
         parts = []

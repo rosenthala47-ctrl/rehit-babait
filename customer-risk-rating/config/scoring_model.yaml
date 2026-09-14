@@ -24,6 +24,31 @@ assumptions:
   currency: "ILS"
   default_term_months: 60   # מח"מ משוער לחישוב התשלום החודשי של ההלוואה (עבור DTI)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# כללי נוק-אאוט (Knockout rules) — תנאי דחייה מוחלטים, בלתי-תלויים בציון
+# ─────────────────────────────────────────────────────────────────────────────
+# אם מתקיים אפילו תנאי אחד — הבקשה נדחית אוטומטית ("נדחה עקב כלל נוק-אאוט"),
+# ללא תלות בציון המשוקלל, ושכבת שיקול הדעת (AI) אינה רשאית לבטל זאת.
+# הכלל מופעל רק כאשר הנתון קיים בפועל (חוסר נתון אינו מפעיל נוק-אאוט).
+#   gte: מופעל כאשר הערך >= הסף   ·   lte: כאשר הערך <= הסף
+#   equals: כאשר הערך (טקסט) נמצא ברשימה
+knockout_rules:
+  - id: active_default
+    label_he: "כשל אשראי / הליך הוצל\"פ פעיל"
+    label_en: "Active credit default / enforcement"
+    field: defaults
+    gte: 1
+  - id: restricted_account
+    label_he: "חשבון מוגבל (בנק ישראל)"
+    label_en: "Restricted bank account"
+    field: restricted_account
+    gte: 1
+  - id: bankruptcy
+    label_he: "פשיטת רגל / כונס נכסים / הקפאת הליכים"
+    label_en: "Bankruptcy / receivership"
+    field: bankruptcy
+    gte: 1
+
 decision_bands:
   - id: approve
     min: 1

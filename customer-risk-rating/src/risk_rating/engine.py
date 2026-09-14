@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .config import Criterion, ScoringModel
+from .config import Criterion, DecisionBand, ScoringModel
 from .features import get_feature
 
 
@@ -77,6 +77,12 @@ class RiskResult:
     external_report: Optional[Dict[str, Any]] = None
     # discretionary second-look decision (AI / heuristic), when requested
     adjudication: Optional[Dict[str, Any]] = None
+    # hard auto-reject triggers (knockout rules) that fired, if any
+    knockouts: List[Dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def is_knockout(self) -> bool:
+        return bool(self.knockouts)
 
     def top_risk_drivers(self, n: int = 3) -> List[CriterionScore]:
         """The criteria contributing the most risk to the final score."""
@@ -97,6 +103,8 @@ class RiskResult:
             },
             "external_report": self.external_report,
             "adjudication": self.adjudication,
+            "knockout": self.is_knockout,
+            "knockouts": self.knockouts,
             "breakdown": [c.to_dict() for c in self.breakdown],
         }
 
@@ -172,6 +180,22 @@ class RiskEngine:
                             min(self.model.scale_max, round_half_up(total)))
         band = self.model.band_for(score_rounded)
 
+        # Knockout rules override the weighted decision: any hard trigger forces
+        # an outright reject, regardless of how good the rest of the profile is.
+        triggered = self.model.check_knockouts(record)
+        knockouts = [{"id": r.id, "label_he": r.label_he} for r in triggered]
+        if triggered:
+            reject = self.model.reject_band() or band
+            band = DecisionBand(
+                id=reject.id,
+                min=reject.min,
+                max=reject.max,
+                label_he=reject.label_he,
+                label_en=reject.label_en,
+                action_he="דחייה אוטומטית (כלל נוק-אאוט): "
+                          + "; ".join(k["label_he"] for k in knockouts),
+            )
+
         return RiskResult(
             customer_id=str(record.get("customer_id", "")),
             full_name=str(record.get("full_name", "")),
@@ -183,4 +207,5 @@ class RiskEngine:
             decision_action_he=band.action_he,
             breakdown=breakdown,
             currency=str(self.model.assumptions.get("currency", "ILS")),
+            knockouts=knockouts,
         )
