@@ -39,8 +39,9 @@
   .meta { color: var(--muted); font-size: .95rem; margin-inline-start: auto; text-align: start; }
   .meta b { color: var(--ink); }
 
+  /* ציר RTL: סיכון נמוך (ירוק) בימין, סיכון גבוה (אדום) בשמאל — תואם את מיקום הסמן */
   .scale { position: relative; height: 14px; border-radius: 999px; margin: 22px 0 8px;
-    background: linear-gradient(90deg, var(--approve) 0 30%, var(--review) 30% 60%, var(--reject) 60% 100%); }
+    background: linear-gradient(90deg, var(--reject) 0 44.4%, var(--review) 44.4% 77.8%, var(--approve) 77.8% 100%); }
   /* RTL: 1 (low risk) on the right, 10 (high risk) on the left */
   .marker { position: absolute; top: -6px; width: 4px; height: 26px; background: #0f172a;
     border-radius: 2px; transform: translateX(2px); box-shadow: 0 0 0 3px #fff; }
