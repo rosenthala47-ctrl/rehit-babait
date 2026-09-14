@@ -41,6 +41,11 @@
     border: 1px solid var(--line); }
   .bureau.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
   .bureau.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+  .knockout { margin-top: 16px; padding: 14px 16px; border-radius: 12px; font-size: .95rem; display: none;
+    background: #fef2f2; border: 2px solid #dc2626; color: #991b1b; }
+  .knockout.on { display: block; }
+  .knockout .ko-title { font-weight: 800; margin-bottom: 6px; font-size: 1.02rem; }
+  .knockout ul { margin: 6px 0 0; padding-inline-start: 20px; }
   .override { margin-top: 16px; padding: 14px 16px; border-radius: 12px; font-size: .95rem; display: none; }
   .override.on { display: block; background: #fef2f2; border: 2px solid #dc2626; color: #991b1b; }
   .override.blocked { display: block; background: #f8fafc; border: 1px dashed #94a3b8; color: #475569; font-size: .9rem; }
@@ -74,7 +79,8 @@
   <header>
     <h1>דירוג סיכון לקוח 🛡️</h1>
     <p>שואבת את <b>כל</b> נתוני הלקוח מכל טבלאות החברה, שולפת דירוג אשראי ממרשם <b>בנק ישראל</b> (בהסכמה),
-       ומחזירה ציון והחלטה — <b>תוך שנייה</b>. עם שיקול דעת שיודע לאשר חריגות מבוקרות.</p>
+       ומחזירה ציון והחלטה — <b>תוך שנייה</b>. עם שיקול דעת שיודע לאשר חריגות מבוקרות,
+       וכללי <b>נוק-אאוט</b> לדחייה מוחלטת (פשיטת רגל, חשבון מוגבל, כשל אשראי פעיל).</p>
     <span class="tag">הדגמה · כל החישוב מתבצע בדפדפן · נתונים לדוגמה בלבד</span>
   </header>
 
@@ -134,6 +140,7 @@
       </div>
     </div>
     <div class="bureau" id="bureau"></div>
+    <div class="knockout" id="knockout"></div>
     <div class="override" id="override"></div>
     <div class="scale"><div class="marker" id="marker"></div></div>
     <div class="scale-legend">
@@ -198,6 +205,12 @@ const MODEL = {
     { id: "family_stability", label: "יציבות משפחתית (מצב משפחתי)", weight: 0.03, source: "marital_status", type: "cat",
       mapping: { married:1, widowed:3, single:4, divorced:5 }, unknown:4, missing:4 },
   ],
+  // כללי נוק-אאוט — דחייה מוחלטת, בלתי-תלויה בציון (mirror scoring_model.yaml)
+  knockout_rules: [
+    { id: "active_default",     label: 'כשל אשראי / הליך הוצל"פ פעיל',           field: "defaults",           gte: 1 },
+    { id: "restricted_account", label: "חשבון מוגבל (בנק ישראל)",                field: "restricted_account", gte: 1 },
+    { id: "bankruptcy",         label: "פשיטת רגל / כונס נכסים / הקפאת הליכים",  field: "bankruptcy",         gte: 1 },
+  ],
 };
 
 // ── נתוני החברה עצמה (דמוגרפיה, תעסוקה, בנק) — ללא נתוני אשראי ────────────────
@@ -225,9 +238,9 @@ const BUREAU = {
   "067890345": { external_bureau_score:690, monthly_debt_payments:3800, missed_payments_12m:1, defaults:0, credit_utilization:0.55, oldest_account_years:10, total_debt:90000,  hard_inquiries_6m:2 },
   "078901456": { external_bureau_score:650, monthly_debt_payments:400,  missed_payments_12m:0, defaults:0, credit_utilization:0.45, oldest_account_years:2,  total_debt:8000,   hard_inquiries_6m:1 },
   "012345678": { external_bureau_score:760, monthly_debt_payments:0,    missed_payments_12m:0, defaults:0, credit_utilization:0.10, oldest_account_years:30, total_debt:0,      hard_inquiries_6m:0 },
-  "089012567": { external_bureau_score:560, monthly_debt_payments:3200, missed_payments_12m:4, defaults:2, credit_utilization:0.85, oldest_account_years:9,  total_debt:75000,  hard_inquiries_6m:4 },
-  "311478502": { external_bureau_score:700, monthly_debt_payments:5200, missed_payments_12m:0, defaults:0, credit_utilization:0.50, oldest_account_years:25, total_debt:180000, hard_inquiries_6m:1 },
-  "358024917": { external_bureau_score:480, monthly_debt_payments:3000, missed_payments_12m:2, defaults:1, credit_utilization:0.80, oldest_account_years:9,  total_debt:90000,  hard_inquiries_6m:3 },
+  "089012567": { external_bureau_score:560, monthly_debt_payments:3200, missed_payments_12m:4, defaults:2, credit_utilization:0.85, oldest_account_years:9,  total_debt:75000,  hard_inquiries_6m:4, restricted_account:1, bankruptcy:0 },
+  "311478502": { external_bureau_score:700, monthly_debt_payments:5200, missed_payments_12m:0, defaults:0, credit_utilization:0.50, oldest_account_years:25, total_debt:180000, hard_inquiries_6m:1, restricted_account:0, bankruptcy:0 },
+  "358024917": { external_bureau_score:480, monthly_debt_payments:3000, missed_payments_12m:2, defaults:1, credit_utilization:0.80, oldest_account_years:9,  total_debt:90000,  hard_inquiries_6m:3, restricted_account:1, bankruptcy:1 },
 };
 
 // ── מנוע הניקוד (מראה את engine.py) ──────────────────────────────────────────
@@ -294,8 +307,22 @@ function score(company, amount, consent, purpose, collateral, doAdjudicate) {
   }
   total = clamp(total);
   const rounded = clamp(roundHalfUp(total));
-  const band = MODEL.decision_bands.find((b) => rounded >= b.min && rounded <= b.max);
-  const res = { score: total, rounded, band, breakdown, report };
+  let band = MODEL.decision_bands.find((b) => rounded >= b.min && rounded <= b.max);
+
+  // כללי נוק-אאוט — כל תנאי מתקיים מפיל אוטומטית לדחייה, ללא תלות בציון
+  const knockouts = [];
+  for (const rule of (MODEL.knockout_rules || [])) {
+    const v = record[rule.field];
+    if (v === undefined || v === null || v === "") continue;
+    if (rule.gte != null && Number(v) >= rule.gte) knockouts.push({ id: rule.id, label: rule.label });
+  }
+  if (knockouts.length) {
+    const reject = MODEL.decision_bands.find((b) => b.id === "reject");
+    band = { id: reject.id, min: reject.min, max: reject.max, label: reject.label,
+             action: "דחייה אוטומטית (כלל נוק-אאוט): " + knockouts.map((k) => k.label).join("; ") };
+  }
+
+  const res = { score: total, rounded, band, breakdown, report, knockouts };
   res.adjudication = doAdjudicate ? adjudicate(res, record) : null;
   return res;
 }
@@ -321,10 +348,14 @@ function hardBlocks(res, record) {
 
 function adjudicate(res, record) {
   const model = res.band.id;
-  const blocks = hardBlocks(res, record);
+  const koReasons = (res.knockouts || []).map((k) => k.label);
+  const hard = hardBlocks(res, record);
+  const blocks = koReasons.concat(hard.filter((b) => !koReasons.includes(b)));
   if (blocks.length) return { reviewed: true, is_override: false, model_decision: model,
     final_decision: model, final_label: bandLabel(model), early_career: false, confidence: "high",
-    rationale: "נבחנה אפשרות לחריגה — נחסמה על ידי מעקות הבטיחות: " + blocks.join("; ") + ".",
+    rationale: koReasons.length
+      ? "דחייה מוחלטת עקב כלל נוק-אאוט — שיקול הדעת אינו רשאי לבטל זאת: " + blocks.join("; ") + "."
+      : "נבחנה אפשרות לחריגה — נחסמה על ידי מעקות הבטיחות: " + blocks.join("; ") + ".",
     conditions: "", blocked: blocks, source: "guardrail" };
 
   const risk = {}; for (const c of res.breakdown) risk[c.id] = c.risk;
@@ -367,6 +398,10 @@ function explain(company, res, amount) {
   const lines = [];
   lines.push(`הלקוח ${company.full_name} ביקש הלוואה בסך ${fmtAmount(amount)}. ` +
     `ציון הסיכון שחושב הוא ${res.score.toFixed(1)} מתוך 10 (מעוגל ל-${res.rounded}) — ההמלצה: ${res.band.label}.`);
+  if (res.knockouts && res.knockouts.length) {
+    lines.push("⛔ נדחה עקב כלל נוק-אאוט — תנאי דחייה מוחלט שאינו תלוי בציון: " +
+      res.knockouts.map((k) => k.label).join("; ") + ". (שכבת שיקול הדעת אינה רשאית לבטל דחייה זו.)");
+  }
   const drivers = [...res.breakdown].filter((c) => c.risk >= 5).sort((a, b) => b.contribution - a.contribution).slice(0, 3);
   if (drivers.length) lines.push("גורמי הסיכון המרכזיים: " + drivers.map((c) =>
     `${c.label} (ערך: ${c.missing ? "חסר נתון" : fmtRaw(c.raw)}, תת-ציון ${c.risk}/10)`).join("; ") + ".");
@@ -401,6 +436,18 @@ function render(company, id, amount, consent, purpose, collateral, doAdjudicate)
     bureau.className = "bureau warn";
     bureau.textContent = "🏦 " + res.report.message;
   }
+
+  // knockout — hard auto-reject, shown in RED
+  const ko = document.getElementById("knockout");
+  ko.innerHTML = "";
+  if (res.knockouts && res.knockouts.length) {
+    ko.className = "knockout on";
+    const t = document.createElement("div"); t.className = "ko-title";
+    t.textContent = "⛔ נדחה עקב כלל נוק-אאוט — דחייה מוחלטת, ללא תלות בציון";
+    const ul = document.createElement("ul");
+    for (const k of res.knockouts) { const li = document.createElement("li"); li.textContent = k.label; ul.appendChild(li); }
+    ko.append(t, ul);
+  } else { ko.className = "knockout"; }
 
   // discretionary override — shown in RED
   const adj = res.adjudication;
