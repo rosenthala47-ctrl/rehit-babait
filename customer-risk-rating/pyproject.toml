@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "customer-risk-rating"
+version = "0.1.0"
+description = "מנוע דירוג סיכון לקוח לחברות אשראי · Customer risk-rating engine for credit providers"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "pandas>=2.0",
+    "PyYAML>=6.0",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.110", "uvicorn>=0.29"]
+ai = ["anthropic>=0.40"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+risk-rating = "risk_rating.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
