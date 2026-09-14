@@ -17,7 +17,7 @@ def service():
 
 # ── end-to-end anchors on the sample data ────────────────────────────────────
 def test_yossi_is_low_risk_approve(service):
-    result = service.assess("יוסי", 100000)
+    result = service.assess("C1001", 100000)   # by id: two customers are named יוסי כהן
     assert result.customer_id == "C1001"
     assert result.score == pytest.approx(2.11, abs=0.01)
     assert result.score_rounded == 2
@@ -34,14 +34,14 @@ def test_unemployed_high_risk_reject(service):
 
 def test_loan_purpose_and_collateral_affect_score(service):
     """Request-level Conditions/Collateral inputs move the score."""
-    base = service.assess("יוסי", 100000, purpose="debt_consolidation",
+    base = service.assess("C1001", 100000, purpose="debt_consolidation",
                           collateral="full_secured").score
     # speculative purpose + no collateral is riskier than consolidation + secured
-    riskier = service.assess("יוסי", 100000, purpose="investment",
+    riskier = service.assess("C1001", 100000, purpose="investment",
                              collateral="unsecured").score
     assert riskier > base
 
-    crit = next(c for c in service.assess("יוסי", 100000, purpose="investment")
+    crit = next(c for c in service.assess("C1001", 100000, purpose="investment")
                 .breakdown if c.id == "loan_purpose")
     assert crit.risk == 9  # investment -> high risk per the model
 
@@ -54,8 +54,8 @@ def test_borderline_goes_to_review(service):
 
 def test_larger_loan_raises_risk(service):
     """A bigger requested amount can only push DTI (and the score) up."""
-    small = service.assess("יוסי", 50000).score
-    big = service.assess("יוסי", 900000).score
+    small = service.assess("C1001", 50000).score
+    big = service.assess("C1001", 900000).score
     assert big > small
 
 
@@ -70,14 +70,14 @@ def test_missing_table_data_uses_missing_risk(service):
 
 def test_score_dict_is_json_serializable(service):
     import json
-    result = service.assess("יוסי", 100000)
+    result = service.assess("C1001", 100000)
     json.dumps(result.to_dict())  # must not raise
 
 
 # ── unit tests on the scoring primitives ─────────────────────────────────────
 def test_model_has_expanded_criteria(service):
     """The model covers the 5 Cs — credit, capacity, capital, collateral, conditions."""
-    result = service.assess("יוסי", 100000)
+    result = service.assess("C1001", 100000)
     ids = {c.id for c in result.breakdown}
     assert {"bureau_score", "credit_history_length", "recent_inquiries",
             "existing_leverage", "liquidity_savings", "collateral",

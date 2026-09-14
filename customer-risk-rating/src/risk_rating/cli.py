@@ -144,10 +144,15 @@ def main(argv: List[str] | None = None) -> int:
         return 2
 
     if args.list:
-        customers = service.list_customers()
-        print(f"נמצאו {len(customers)} לקוחות (טבלאות: {', '.join(service.store.tables)}):")
-        for cid, name in customers:
-            print(f"  {cid}  ·  {name}")
+        details = service.store.list_customer_details()
+        print(f"נמצאו {len(details)} לקוחות (טבלאות: {', '.join(service.store.tables)}):")
+        for c in details:
+            extra = " · ".join(x for x in [
+                c.get("city"),
+                f'ת"ז {c["national_id_masked"]}' if c.get("national_id_masked") else None,
+            ] if x)
+            print(f"  {c['customer_id']}  ·  {c['full_name']}"
+                  + (f"  ({extra})" if extra else ""))
         return 0
 
     if not args.customer:

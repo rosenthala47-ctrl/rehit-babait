@@ -41,12 +41,12 @@ def test_review_band_with_default_is_blocked(service):
 
 
 def test_clearly_approved_customer_no_override(service):
-    r = service.assess("יוסי", 100000, adjudicate=True)
+    r = service.assess("C1001", 100000, adjudicate=True)
     assert r.adjudication["is_override"] is False
 
 
 def test_adjudication_absent_unless_requested(service):
-    assert service.assess("יוסי", 100000).adjudication is None
+    assert service.assess("C1001", 100000).adjudication is None
 
 
 def test_override_is_at_most_one_band_and_never_harsher():

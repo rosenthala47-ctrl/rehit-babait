@@ -76,7 +76,7 @@ def service():
 
 
 def test_assess_pulls_credit_report(service):
-    result = service.assess("יוסי", 100000, consent=True)
+    result = service.assess("C1001", 100000, consent=True)
     rep = result.external_report
     assert rep["status"] == "ok"
     assert rep["bureau_score"] == 720
@@ -87,22 +87,22 @@ def test_assess_pulls_credit_report(service):
 
 def test_bureau_score_is_a_scored_criterion(service):
     """The external credit score itself feeds a scoring criterion."""
-    with_consent = service.assess("יוסי", 100000, consent=True)
+    with_consent = service.assess("C1001", 100000, consent=True)
     crit = next(c for c in with_consent.breakdown if c.id == "bureau_score")
     assert crit.raw_value == 720        # pulled from the register
     assert crit.risk == 2               # 720 -> low risk band
     assert crit.missing is False
 
     # without a bureau pull, the criterion falls back to missing-data risk
-    without = service.assess("יוסי", 100000, consent=False)
+    without = service.assess("C1001", 100000, consent=False)
     crit2 = next(c for c in without.breakdown if c.id == "bureau_score")
     assert crit2.missing is True
     assert crit2.risk == 7              # missing_risk for bureau_score
 
 
 def test_no_consent_skips_bureau_and_raises_risk(service):
-    with_consent = service.assess("יוסי", 100000, consent=True)
-    without = service.assess("יוסי", 100000, consent=False)
+    with_consent = service.assess("C1001", 100000, consent=True)
+    without = service.assess("C1001", 100000, consent=False)
     assert without.external_report["status"] == "no_consent"
     # credit criteria now fall back to missing-data risk -> higher score
     assert without.score > with_consent.score

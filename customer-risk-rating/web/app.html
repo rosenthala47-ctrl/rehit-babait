@@ -182,7 +182,8 @@ async function loadCustomers() {
     sel.innerHTML = "";
     for (const c of data.customers) {
       const o = document.createElement("option");
-      o.value = c.id; o.textContent = `${c.name} (${c.id})`;
+      o.value = c.id;
+      o.textContent = c.city ? `${c.name} · ${c.city} (${c.id})` : `${c.name} (${c.id})`;
       sel.appendChild(o);
     }
   } catch (e) { sel.innerHTML = "<option>שגיאה בטעינה</option>"; }
@@ -284,7 +285,11 @@ document.getElementById("form").addEventListener("submit", async (ev) => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); showError(e.detail || "שגיאה בחישוב"); }
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      const d = e.detail;
+      showError((d && d.message) || d || "שגיאה בחישוב");
+    }
     else { render(await res.json()); }
   } catch (e) { showError("שגיאת רשת: " + e.message); }
   finally { btn.disabled = false; btn.textContent = "חשב דירוג סיכון"; }

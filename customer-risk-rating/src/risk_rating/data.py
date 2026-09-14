@@ -19,12 +19,36 @@ class CustomerNotFound(Exception):
     pass
 
 
+def _canonical_nid(value: Any) -> str:
+    """Normalize an Israeli national id to 9 digits (restores lost leading zeros)."""
+    digits = "".join(ch for ch in str(value) if ch.isdigit())
+    return digits.zfill(9) if digits else ""
+
+
 class AmbiguousCustomer(Exception):
-    def __init__(self, query: str, matches: List[Tuple[str, str]]):
+    """Raised when a name matches more than one customer.
+
+    ``candidates`` lists each match with distinguishing details so the caller
+    (or a UI) can pick the right person — names are not unique, the national id
+    (ת"ז) is.
+    """
+
+    def __init__(self, query: str, candidates: List[Dict[str, Any]]):
         self.query = query
-        self.matches = matches
-        listed = ", ".join(f"{name} ({cid})" for cid, name in matches)
-        super().__init__(f"'{query}' תואם ליותר מלקוח אחד: {listed}")
+        self.candidates = candidates
+        lines = []
+        for c in candidates:
+            bits = [f"{c['full_name']} ({c['customer_id']})"]
+            if c.get("national_id_masked"):
+                bits.append(f"ת\"ז {c['national_id_masked']}")
+            if c.get("city"):
+                bits.append(str(c["city"]))
+            if c.get("age") is not None:
+                bits.append(f"גיל {c['age']}")
+            lines.append("  • " + " · ".join(bits))
+        super().__init__(
+            f"'{query}' תואם ל-{len(candidates)} לקוחות. ציין ת\"ז או מזהה לקוח:\n"
+            + "\n".join(lines))
 
 
 def _clean(value: Any) -> Any:
@@ -101,10 +125,12 @@ class DataStore:
 
     @staticmethod
     def _read(path: Path):
+        # keep ids as strings so national-id leading zeros survive
+        dtypes = {"customer_id": str, "national_id": str}
         try:
             if path.suffix.lower() in (".xlsx", ".xls"):
-                return pd.read_excel(path, dtype={"customer_id": str})
-            return pd.read_csv(path, dtype={"customer_id": str})
+                return pd.read_excel(path, dtype=dtypes)
+            return pd.read_csv(path, dtype=dtypes)
         except Exception as exc:  # noqa: BLE001 - surface as a warning, keep going
             print(f"⚠️  לא ניתן לקרוא את {path.name}: {exc}")
             return None
@@ -117,6 +143,22 @@ class DataStore:
             key=lambda t: t[0],
         )
 
+    def _candidate(self, cid: str) -> Dict[str, Any]:
+        """Distinguishing details for a customer (for pickers / ambiguity)."""
+        r = self._records[cid]
+        nid = _canonical_nid(r.get("national_id", ""))
+        masked = ("•" * max(0, len(nid) - 4)) + nid[-4:] if nid else ""
+        return {
+            "customer_id": cid,
+            "full_name": str(r.get("full_name", "")),
+            "national_id_masked": masked,
+            "city": r.get("city"),
+            "age": r.get("age"),
+        }
+
+    def list_customer_details(self) -> List[Dict[str, Any]]:
+        return [self._candidate(cid) for cid, _ in self.list_customers()]
+
     def get_record(self, customer_id: str) -> Dict[str, Any]:
         rec = self._records.get(str(customer_id).strip())
         if rec is None:
@@ -124,32 +166,47 @@ class DataStore:
         return dict(rec)
 
     def resolve(self, query: str) -> str:
-        """Resolve a query to a single customer_id (by id or by name)."""
+        """Resolve a query to a single customer_id.
+
+        Resolution order: exact customer_id → national id (ת"ז) → exact name →
+        partial name. Names are not unique, so a name matching more than one
+        person raises :class:`AmbiguousCustomer` with the candidates' details —
+        pass a ת"ז or a customer id to disambiguate.
+        """
         q = str(query).strip()
         if not q:
             raise CustomerNotFound("שאילתת לקוח ריקה")
 
-        # 1) exact id
+        # 1) exact customer id
         if q in self._records:
             return q
 
-        # 2) exact name (case-insensitive)
-        exact = [(cid, str(r.get("full_name", "")))
-                 for cid, r in self._records.items()
+        # 2) national id (ת"ז) — the unique key, as the credit register uses
+        qd = "".join(ch for ch in q if ch.isdigit())
+        if qd and len(qd) <= 9 and qd == q.replace("-", "").replace(" ", ""):
+            canon = _canonical_nid(q)
+            by_nid = [cid for cid, r in self._records.items()
+                      if _canonical_nid(r.get("national_id", "")) == canon]
+            if len(by_nid) == 1:
+                return by_nid[0]
+            if len(by_nid) > 1:  # national ids should be unique; guard anyway
+                raise AmbiguousCustomer(q, [self._candidate(c) for c in by_nid])
+
+        # 3) exact name (case-insensitive)
+        exact = [cid for cid, r in self._records.items()
                  if str(r.get("full_name", "")).strip().lower() == q.lower()]
         if len(exact) == 1:
-            return exact[0][0]
+            return exact[0]
         if len(exact) > 1:
-            raise AmbiguousCustomer(q, exact)
+            raise AmbiguousCustomer(q, [self._candidate(c) for c in exact])
 
-        # 3) partial name match
-        partial = [(cid, str(r.get("full_name", "")))
-                   for cid, r in self._records.items()
+        # 4) partial name match
+        partial = [cid for cid, r in self._records.items()
                    if q.lower() in str(r.get("full_name", "")).lower()]
         if len(partial) == 1:
-            return partial[0][0]
+            return partial[0]
         if len(partial) > 1:
-            raise AmbiguousCustomer(q, partial)
+            raise AmbiguousCustomer(q, [self._candidate(c) for c in partial])
 
         raise CustomerNotFound(f"לא נמצא לקוח '{query}'")
 

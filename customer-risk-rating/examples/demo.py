@@ -29,8 +29,9 @@ def main() -> None:
         print(f"  {r.score:>5.1f}  {icon} {r.decision_label_he:<10}  {name} ({cid})")
 
     print("\n" + "=" * 60)
-    print("דוגמה מלאה — יוסי מבקש 100,000 ₪:\n")
-    result = service.assess("יוסי", amount)
+    print("דוגמה מלאה — יוסי כהן (C1001) מבקש 100,000 ₪:\n")
+    # NOTE: two customers are named "יוסי כהן"; resolve by id or ת"ז, not by name.
+    result = service.assess("C1001", amount)
     print(format_report(result))
     print("\nהסבר:")
     print(explain(result))  # use_ai=True ישתמש ב-Claude אם מוגדר מפתח API

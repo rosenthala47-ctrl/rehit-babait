@@ -71,8 +71,11 @@ def health() -> dict:
 
 @app.get("/api/customers")
 def customers() -> dict:
-    return {"customers": [{"id": cid, "name": name}
-                          for cid, name in service.list_customers()]}
+    # include distinguishing details so same-named customers are told apart
+    return {"customers": [
+        {"id": c["customer_id"], "name": c["full_name"],
+         "city": c.get("city"), "national_id_masked": c.get("national_id_masked")}
+        for c in service.store.list_customer_details()]}
 
 
 @app.post("/api/score")
@@ -83,7 +86,9 @@ def score(req: ScoreRequest) -> JSONResponse:
                                 adjudicate=req.adjudicate,
                                 use_ai=req.use_ai and ai_available())
     except AmbiguousCustomer as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+        # same name matches several people — hand back the candidates to choose from
+        raise HTTPException(status_code=409,
+                            detail={"message": str(exc), "candidates": exc.candidates})
     except CustomerNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 

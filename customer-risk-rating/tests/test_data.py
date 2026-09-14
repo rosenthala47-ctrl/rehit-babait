@@ -12,9 +12,9 @@ def store():
 
 def test_loads_all_customers(store):
     customers = store.list_customers()
-    assert len(customers) == 8
+    assert len(customers) == 9
     ids = {cid for cid, _ in customers}
-    assert {"C1001", "C1008"} <= ids
+    assert {"C1001", "C1008", "C1009"} <= ids
 
 
 def test_record_merges_all_tables(store):
@@ -41,12 +41,30 @@ def test_resolve_by_id(store):
     assert store.resolve("C1003") == "C1003"
 
 
-def test_resolve_by_exact_name(store):
-    assert store.resolve("יוסי כהן") == "C1001"
+def test_resolve_by_unique_name(store):
+    assert store.resolve("שרה לוי") == "C1002"
 
 
 def test_resolve_by_partial_name(store):
     assert store.resolve("מזרחי") == "C1003"
+
+
+def test_resolve_by_national_id(store):
+    # two customers are named "יוסי כהן" — the ת"ז disambiguates them
+    assert store.resolve("034512789") == "C1001"
+    assert store.resolve("311478502") == "C1009"
+    # leading zero may be lost on input; resolution restores it
+    assert store.resolve("34512789") == "C1001"
+
+
+def test_duplicate_name_is_ambiguous(store):
+    with pytest.raises(AmbiguousCustomer) as exc:
+        store.resolve("יוסי כהן")
+    cands = exc.value.candidates
+    assert {c["customer_id"] for c in cands} == {"C1001", "C1009"}
+    # candidates carry distinguishing details (masked ת"ז, city)
+    assert all(c["national_id_masked"] for c in cands)
+    assert {c["city"] for c in cands} == {"תל אביב", "חיפה"}
 
 
 def test_resolve_unknown_raises(store):
