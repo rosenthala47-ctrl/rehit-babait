@@ -1,0 +1,31 @@
+name: CI
+
+# מריץ אוטומטית את כל הבדיקות על כל push ועל כל Pull Request.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (customer-risk-rating)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: customer-risk-rating
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: customer-risk-rating/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+        run: pytest -q
