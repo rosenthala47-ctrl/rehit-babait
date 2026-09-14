@@ -1,9 +1,15 @@
 name: CI
 
-# מריץ אוטומטית את כל הבדיקות על כל push ועל כל Pull Request.
+# מריץ אוטומטית את כל הבדיקות על כל Pull Request ועל push ל-main.
 on:
   push:
+    branches: [main]
   pull_request:
+
+# מבטל ריצה קודמת של אותו ref כשמגיע push חדש (חוסך זמן CI).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:

@@ -1,5 +1,7 @@
 # דירוג סיכון לקוח 🛡️ · Customer Risk Rating
 
+[![CI](https://github.com/rosenthala47-ctrl/rehit-babait/actions/workflows/ci.yml/badge.svg)](https://github.com/rosenthala47-ctrl/rehit-babait/actions/workflows/ci.yml)
+
 מערכת שיושבת בתוך המערכת של חברת האשראי, שואבת אוטומטית את **כל** נתוני הלקוח
 מכל טבלאות הנתונים (האקסלים), ומחזירה **ציון סיכון (1–10) והחלטה** תוך שנייה —
 במקום שאדם יעבור טבלה־טבלה ידנית.
