@@ -75,6 +75,8 @@ class RiskResult:
     currency: str = "ILS"
     # provenance of externally-pulled data (e.g. the Bank of Israel credit report)
     external_report: Optional[Dict[str, Any]] = None
+    # discretionary second-look decision (AI / heuristic), when requested
+    adjudication: Optional[Dict[str, Any]] = None
 
     def top_risk_drivers(self, n: int = 3) -> List[CriterionScore]:
         """The criteria contributing the most risk to the final score."""
@@ -94,6 +96,7 @@ class RiskResult:
                 "action_he": self.decision_action_he,
             },
             "external_report": self.external_report,
+            "adjudication": self.adjudication,
             "breakdown": [c.to_dict() for c in self.breakdown],
         }
 

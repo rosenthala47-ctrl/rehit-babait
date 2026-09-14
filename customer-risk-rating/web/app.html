@@ -51,6 +51,13 @@
   .bureau.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
   .bureau.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 
+  .override { margin-top: 16px; padding: 14px 16px; border-radius: 12px; font-size: .95rem; display: none; }
+  .override.on { display: block; background: #fef2f2; border: 2px solid #dc2626; color: #991b1b; }
+  .override.blocked { display: block; background: #f8fafc; border: 1px dashed #94a3b8; color: #475569; font-size: .9rem; }
+  .override .ov-title { font-weight: 800; margin-bottom: 6px; }
+  .override .ov-cond { margin-top: 8px; font-size: .88rem; }
+  .override .ov-src { margin-top: 6px; font-size: .78rem; opacity: .8; }
+
   h3 { margin: 24px 0 12px; font-size: 1.05rem; }
   .crit { padding: 10px 0; border-top: 1px solid var(--line); }
   .crit-top { display: flex; justify-content: space-between; gap: 10px; font-size: .92rem; }
@@ -117,8 +124,12 @@
         <label for="consent" style="margin:0">הלקוח נתן הסכמה למשיכת נתוני אשראי ממרשם בנק ישראל</label>
       </div>
       <div class="row-full checkbox">
+        <input type="checkbox" id="adjudicate" checked />
+        <label for="adjudicate" style="margin:0">שיקול דעת (Override) — בחינת התמונה המלאה; יכול לאשר חריגה ללקוח בתחילת דרכו</label>
+      </div>
+      <div class="row-full checkbox">
         <input type="checkbox" id="use_ai" />
-        <label for="use_ai" style="margin:0">הוספת חוות דעת חיתום מבוססת-AI (Claude) — אם מוגדר מפתח API</label>
+        <label for="use_ai" style="margin:0">להפעיל את Claude לשיקול הדעת ולחוות הדעת (אם מוגדר מפתח API)</label>
       </div>
       <button type="submit" id="submit">חשב דירוג סיכון</button>
     </form>
@@ -135,6 +146,7 @@
     </div>
 
     <div class="bureau" id="bureau"></div>
+    <div class="override" id="override"></div>
 
     <div class="scale"><div class="marker" id="marker"></div></div>
     <div class="scale-legend">
@@ -203,6 +215,25 @@ function render(d) {
     bureau.textContent = "🏦 " + (rep.message || "נתוני אשראי לא נשלפו");
   } else { bureau.className = "bureau"; bureau.textContent = ""; }
 
+  // discretionary second-look override — shown in RED
+  const adj = d.adjudication;
+  const ov = document.getElementById("override");
+  ov.innerHTML = "";
+  if (adj && adj.is_override) {
+    ov.className = "override on";
+    const t = document.createElement("div"); t.className = "ov-title";
+    t.textContent = `⚠ החלטת חריגה בשיקול דעת → ${adj.final_label_he}`;
+    const l = document.createElement("div");
+    l.textContent = `הלקוח אינו עומד במלוא הקריטריונים (ציון מודל ${d.score.toFixed(1)} → ${d.decision.label_he}), אך התקבלה החלטה לאחר בחינת התמונה המלאה.`;
+    const w = document.createElement("div"); w.textContent = "נימוק: " + adj.rationale_he;
+    ov.append(t, l, w);
+    if (adj.conditions_he) { const c = document.createElement("div"); c.className = "ov-cond"; c.textContent = "תנאים: " + adj.conditions_he; ov.append(c); }
+    const s = document.createElement("div"); s.className = "ov-src"; s.textContent = `מקור: ${adj.source} · רמת ביטחון: ${adj.confidence}`; ov.append(s);
+  } else if (adj && adj.blocked_reasons && adj.blocked_reasons.length) {
+    ov.className = "override blocked";
+    ov.textContent = "שיקול דעת: נבחנה חריגה ונחסמה ע\"י מעקות הבטיחות — " + adj.rationale_he;
+  } else { ov.className = "override"; }
+
   // RTL scale: 1 on the right, 10 on the left -> offset from the right edge.
   const pct = (d.score - 1) / 9 * 100;
   document.getElementById("marker").style.right = pct + "%";
@@ -245,6 +276,7 @@ document.getElementById("form").addEventListener("submit", async (ev) => {
       consent: document.getElementById("consent").checked,
       purpose: document.getElementById("purpose").value,
       collateral: document.getElementById("collateral").value,
+      adjudicate: document.getElementById("adjudicate").checked,
       explain: true,
       use_ai: document.getElementById("use_ai").checked,
     };

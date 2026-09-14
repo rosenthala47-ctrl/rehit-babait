@@ -19,6 +19,34 @@ from .explain import ai_available, explain
 from .service import DEFAULT_CONFIG, DEFAULT_DATA_DIR, RiskRatingService
 
 _DECISION_ICON = {"approve": "✅", "review": "⚠️", "reject": "⛔"}
+_RED = "\033[91m"
+_BOLD = "\033[1m"
+_DIM = "\033[2m"
+_RESET = "\033[0m"
+
+
+def format_adjudication(adj: dict) -> str:
+    """Render the discretionary second-look decision (override shown in red)."""
+    if not adj:
+        return ""
+    out: List[str] = []
+    if adj.get("is_override"):
+        out.append("")
+        out.append(f"{_RED}{_BOLD}⚠ החלטת חריגה בשיקול דעת (Override) → "
+                   f"{adj['final_label_he']} ⚠{_RESET}")
+        out.append(f"{_RED}הלקוח אינו עומד במלוא הקריטריונים, אך התקבלה החלטה "
+                   f"לאחר בחינת התמונה המלאה.{_RESET}")
+        out.append(f"{_RED}נימוק: {adj['rationale_he']}{_RESET}")
+        if adj.get("conditions_he"):
+            out.append(f"{_RED}תנאים: {adj['conditions_he']}{_RESET}")
+        out.append(f"{_DIM}(מקור: {adj['source']} · רמת ביטחון: {adj['confidence']}){_RESET}")
+    elif adj.get("blocked_reasons"):
+        out.append("")
+        out.append(f"{_DIM}שיקול דעת (Override): {adj['rationale_he']}{_RESET}")
+    else:
+        out.append("")
+        out.append(f"{_DIM}שיקול דעת: {adj['rationale_he']}{_RESET}")
+    return "\n".join(out)
 
 
 def _fmt_amount(amount: float, currency: str) -> str:
@@ -101,6 +129,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="מטרת ההלוואה (למשל debt_consolidation, vehicle, business, investment)")
     p.add_argument("--collateral", default=None,
                    help="בטוחה (full_secured / partial_secured / guarantor / unsecured)")
+    p.add_argument("--adjudicate", action="store_true",
+                   help="הפעלת שיקול דעת (שכבת AI/היוריסטיקה שיכולה לאשר חריגה)")
     return p
 
 
@@ -133,7 +163,8 @@ def main(argv: List[str] | None = None) -> int:
 
     try:
         result = service.assess(args.customer, amount, consent=args.consent,
-                                purpose=args.purpose, collateral=args.collateral)
+                                purpose=args.purpose, collateral=args.collateral,
+                                adjudicate=args.adjudicate, use_ai=args.ai)
     except AmbiguousCustomer as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -155,6 +186,8 @@ def main(argv: List[str] | None = None) -> int:
     if note:
         print(note.strip())
     print(format_report(result))
+    if result.adjudication:
+        print(format_adjudication(result.adjudication))
     if args.explain or args.ai:
         print("\nהסבר:")
         print(explain(result, use_ai=args.ai))

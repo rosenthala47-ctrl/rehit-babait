@@ -15,6 +15,7 @@ import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .adjudicate import adjudicate as _adjudicate
 from .bureau import BureauError, CreditBureauClient, get_bureau_client
 from .config import ScoringModel
 from .data import DataStore
@@ -45,7 +46,9 @@ class RiskRatingService:
                consent: bool = True,
                consent_ref: Optional[str] = None,
                purpose: Optional[str] = None,
-               collateral: Optional[str] = None) -> RiskResult:
+               collateral: Optional[str] = None,
+               adjudicate: bool = False,
+               use_ai: bool = False) -> RiskResult:
         """Resolve the customer, pull their credit report, and score the request.
 
         Parameters
@@ -77,6 +80,9 @@ class RiskRatingService:
 
         result = self.engine.score(record, requested_amount)
         result.external_report = report
+        if adjudicate:
+            result.adjudication = _adjudicate(
+                result, record, self.model, use_ai=use_ai).to_dict()
         return result
 
     # ── credit register integration ──────────────────────────────────────
@@ -120,10 +126,12 @@ class RiskRatingService:
     def assess_dict(self, customer_query: str, requested_amount: float,
                     consent: bool = True, use_ai: bool = False,
                     purpose: Optional[str] = None, collateral: Optional[str] = None,
+                    adjudicate: bool = False,
                     include_explanation: bool = True) -> Dict[str, Any]:
         """Same as :meth:`assess` but returns a JSON-friendly dict + explanation."""
         result = self.assess(customer_query, requested_amount, consent=consent,
-                             purpose=purpose, collateral=collateral)
+                             purpose=purpose, collateral=collateral,
+                             adjudicate=adjudicate, use_ai=use_ai)
         out: Dict[str, Any] = result.to_dict()
         if include_explanation:
             out["explanation"] = _explain(result, use_ai=use_ai)

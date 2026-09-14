@@ -40,6 +40,12 @@
     border: 1px solid var(--line); }
   .bureau.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
   .bureau.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+  .override { margin-top: 16px; padding: 14px 16px; border-radius: 12px; font-size: .95rem; display: none; }
+  .override.on { display: block; background: #fef2f2; border: 2px solid #dc2626; color: #991b1b; }
+  .override.blocked { display: block; background: #f8fafc; border: 1px dashed #94a3b8; color: #475569; font-size: .9rem; }
+  .override .ov-title { font-weight: 800; margin-bottom: 6px; }
+  .override .ov-cond { margin-top: 8px; font-size: .88rem; }
+  .override .ov-src { margin-top: 6px; font-size: .78rem; opacity: .8; }
   .scale { position: relative; height: 14px; border-radius: 999px; margin: 18px 0 8px;
     background: linear-gradient(90deg, var(--approve) 0 30%, var(--review) 30% 60%, var(--reject) 60% 100%); }
   .marker { position: absolute; top: -6px; width: 4px; height: 26px; background: #0f172a;
@@ -107,6 +113,10 @@
         <input type="checkbox" id="consent" checked />
         <label for="consent" style="margin:0">הלקוח נתן הסכמה למשיכת נתוני אשראי ממרשם בנק ישראל</label>
       </div>
+      <div class="checkbox">
+        <input type="checkbox" id="adjudicate" checked />
+        <label for="adjudicate" style="margin:0">שיקול דעת (Override) — בחינת התמונה המלאה; יכול לאשר חריגה ללקוח בתחילת דרכו</label>
+      </div>
       <button type="submit">חשב דירוג סיכון</button>
     </form>
   </div>
@@ -121,6 +131,7 @@
       </div>
     </div>
     <div class="bureau" id="bureau"></div>
+    <div class="override" id="override"></div>
     <div class="scale"><div class="marker" id="marker"></div></div>
     <div class="scale-legend">
       <span>סיכון גבוה · 10</span><span>6</span><span>3</span><span>1 · סיכון נמוך</span>
@@ -257,7 +268,7 @@ function pullCreditReport(company, consent) {
   };
 }
 
-function score(company, amount, consent, purpose, collateral) {
+function score(company, amount, consent, purpose, collateral, doAdjudicate) {
   const { report, record } = pullCreditReport(company, consent);
   record.loan_purpose = purpose;      // Conditions (request-level)
   record.collateral = collateral;     // Collateral (request-level)
@@ -273,7 +284,68 @@ function score(company, amount, consent, purpose, collateral) {
   total = clamp(total);
   const rounded = clamp(roundHalfUp(total));
   const band = MODEL.decision_bands.find((b) => rounded >= b.min && rounded <= b.max);
-  return { score: total, rounded, band, breakdown, report };
+  const res = { score: total, rounded, band, breakdown, report };
+  res.adjudication = doAdjudicate ? adjudicate(res, record) : null;
+  return res;
+}
+
+// ── שיקול דעת / חריגה (mirror adjudicate.py; היוריסטיקה בלבד בדפדפן) ──────────
+const ORDER = ["reject", "review", "approve"];
+const GENUINE = new Set(["payment_history", "defaults", "credit_utilization",
+  "affordability", "banking_conduct", "existing_leverage", "bureau_score"]);
+const bandLabel = (id) => (MODEL.decision_bands.find((b) => b.id === id) || {}).label || id;
+
+function hardBlocks(res, record) {
+  const risk = {}; for (const c of res.breakdown) risk[c.id] = c.risk;
+  const b = [];
+  if ((record.defaults || 0) >= 1) b.push('כשל אשראי / הליך הוצל"פ פעיל');
+  if (String(record.employment_status || "").toLowerCase() === "unemployed") b.push("הלקוח מובטל");
+  if ((risk.affordability || 0) >= 9) b.push("יחס החזר להכנסה (DTI) בלתי-אפשרי");
+  if ((risk.bureau_score || 0) >= 8) b.push("דירוג לשכה נמוך מאוד");
+  if ((risk.payment_history || 0) >= 7) b.push("היסטוריית פיגורים חמורה");
+  if ((risk.banking_conduct || 0) >= 8) b.push("חריגות בנקאיות חמורות");
+  if (res.rounded >= 8) b.push("ציון סיכון גבוה מדי מכדי להצדיק חריגה");
+  return b;
+}
+
+function adjudicate(res, record) {
+  const model = res.band.id;
+  const blocks = hardBlocks(res, record);
+  if (blocks.length) return { reviewed: true, is_override: false, model_decision: model,
+    final_decision: model, final_label: bandLabel(model), early_career: false, confidence: "high",
+    rationale: "נבחנה אפשרות לחריגה — נחסמה על ידי מעקות הבטיחות: " + blocks.join("; ") + ".",
+    conditions: "", blocked: blocks, source: "guardrail" };
+
+  const risk = {}; for (const c of res.breakdown) risk[c.id] = c.risk;
+  const genuine = res.breakdown.filter((c) => GENUINE.has(c.id) && !c.missing).map((c) => c.risk);
+  const gmax = genuine.length ? Math.max(...genuine) : 10;
+  const thin = [];
+  if (record.age != null && record.age <= 30) thin.push("גיל צעיר");
+  if (record.oldest_account_years != null && record.oldest_account_years <= 3) thin.push("היסטוריית אשראי קצרה");
+  if (record.tenure_months != null && record.tenure_months <= 24) thin.push("ותק תעסוקתי קצר");
+  const emp = String(record.employment_status || "").toLowerCase();
+  if (emp === "student" || emp === "employed_temp") thin.push("תעסוקה בתחילת דרך");
+  const clean = gmax <= 5 && (risk.payment_history ?? 10) <= 3 && (record.defaults || 0) === 0;
+
+  let v;
+  if (thin.length && clean && model === "review") {
+    v = { override: true, recommended: "approve", early: true, confidence: "medium",
+      rationale: 'הלקוח אינו עומד במלוא הקריטריונים, אך הפרופיל האשראי הבסיסי נקי (ללא פיגורים/כשלים, יכולת החזר סבירה) והפער נובע מגורמי "תחילת דרך": ' + thin.join(", ") + ". לאחר בחינת התמונה המלאה — אושר בשיקול דעת.",
+      conditions: "מומלץ: מעקב תשלומים ב-6 החודשים הראשונים; אפשר לשקול סכום/מסגרת מדורגים." };
+  } else if (thin.length && gmax <= 3 && res.rounded === 7) {
+    v = { override: true, recommended: "review", early: true, confidence: "low",
+      rationale: "מקרה גבולי: הליבה האשראית איתנה אך הציון גבוה מעט בשל " + thin.join(", ") + ". הומלץ להעביר לבדיקה ידנית במקום דחייה אוטומטית.",
+      conditions: "בדיקת חתם אנושי; לשקול ערב או סכום מופחת." };
+  } else {
+    v = { override: false, recommended: model, early: thin.length > 0, confidence: "medium",
+      rationale: "התמונה המלאה נבחנה — לא נמצאה הצדקה מספקת לחריגה מהקריטריונים.", conditions: "" };
+  }
+  let final = model;
+  if (v.override) { const mi = ORDER.indexOf(model); let ri = ORDER.indexOf(v.recommended); ri = Math.max(mi, Math.min(ri, mi + 1)); final = ORDER[ri]; }
+  const is_override = final !== model;
+  return { reviewed: true, is_override, model_decision: model, final_decision: final,
+    final_label: bandLabel(final), early_career: v.early, confidence: v.confidence,
+    rationale: v.rationale, conditions: is_override ? v.conditions : "", blocked: [], source: "heuristic" };
 }
 
 // ── הסבר מילולי (מראה את explain.py) ────────────────────────────────────────
@@ -299,8 +371,8 @@ function explain(company, res, amount) {
 const COLORS = { approve: "var(--approve)", review: "var(--review)", reject: "var(--reject)" };
 const riskColor = (r) => (r <= 3 ? "var(--approve)" : r <= 6 ? "var(--review)" : "var(--reject)");
 
-function render(company, id, amount, consent, purpose, collateral) {
-  const res = score(company, amount, consent, purpose, collateral);
+function render(company, id, amount, consent, purpose, collateral, doAdjudicate) {
+  const res = score(company, amount, consent, purpose, collateral, doAdjudicate);
   document.getElementById("score").textContent = res.score.toFixed(1);
   document.getElementById("rname").textContent = company.full_name;
   document.getElementById("rid").textContent = id;
@@ -318,6 +390,25 @@ function render(company, id, amount, consent, purpose, collateral) {
     bureau.className = "bureau warn";
     bureau.textContent = "🏦 " + res.report.message;
   }
+
+  // discretionary override — shown in RED
+  const adj = res.adjudication;
+  const ov = document.getElementById("override");
+  ov.innerHTML = "";
+  if (adj && adj.is_override) {
+    ov.className = "override on";
+    const t = document.createElement("div"); t.className = "ov-title";
+    t.textContent = `⚠ החלטת חריגה בשיקול דעת → ${adj.final_label}`;
+    const l = document.createElement("div");
+    l.textContent = `הלקוח אינו עומד במלוא הקריטריונים (ציון מודל ${res.score.toFixed(1)} → ${res.band.label}), אך התקבלה החלטה לאחר בחינת התמונה המלאה.`;
+    const w = document.createElement("div"); w.textContent = "נימוק: " + adj.rationale;
+    ov.append(t, l, w);
+    if (adj.conditions) { const c = document.createElement("div"); c.className = "ov-cond"; c.textContent = "תנאים: " + adj.conditions; ov.append(c); }
+    const s = document.createElement("div"); s.className = "ov-src"; s.textContent = `מקור: ${adj.source} · רמת ביטחון: ${adj.confidence}`; ov.append(s);
+  } else if (adj && adj.blocked && adj.blocked.length) {
+    ov.className = "override blocked";
+    ov.textContent = "שיקול דעת: נבחנה חריגה ונחסמה ע\"י מעקות הבטיחות — " + adj.rationale;
+  } else { ov.className = "override"; }
 
   const bd = document.getElementById("breakdown");
   bd.innerHTML = "";
@@ -349,7 +440,8 @@ function run() {
   render(COMPANY[id], id, amount,
     document.getElementById("consent").checked,
     document.getElementById("purpose").value,
-    document.getElementById("collateral").value);
+    document.getElementById("collateral").value,
+    document.getElementById("adjudicate").checked);
 }
 document.getElementById("form").addEventListener("submit", (e) => { e.preventDefault(); run(); });
 run(); // הצגת תוצאה ראשונית (יוסי · 100,000)

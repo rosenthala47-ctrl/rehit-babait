@@ -6,6 +6,7 @@ decision with a full, explainable breakdown.
 """
 from __future__ import annotations
 
+from .adjudicate import Adjudication, adjudicate
 from .bureau import (CreditBureauClient, CreditReport, HttpBankOfIsraelClient,
                      MockBankOfIsraelClient, get_bureau_client)
 from .config import ScoringModel
@@ -30,6 +31,8 @@ __all__ = [
     "MockBankOfIsraelClient",
     "HttpBankOfIsraelClient",
     "get_bureau_client",
+    "adjudicate",
+    "Adjudication",
     "explain",
     "ai_available",
     "__version__",
