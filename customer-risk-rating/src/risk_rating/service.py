@@ -28,6 +28,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "scoring_model.yaml"
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "sample"
 
+# human-readable source labels for data lineage
+_TABLE_LABELS = {
+    "demographics.csv": "טבלת דמוגרפיה",
+    "employment.csv": "טבלת תעסוקה",
+    "banking.csv": "טבלת עו\"ש / בנק",
+}
+_BUREAU_LABEL = "מרשם נתוני אשראי (בנק ישראל)"
+_REQUEST_LABEL = "בקשת ההלוואה"
+_DERIVED_LABEL = "מחושב מנתונים שנשלפו"
+
 
 class RiskRatingService:
     def __init__(self, data_dir: str | Path = DEFAULT_DATA_DIR,
@@ -153,6 +163,57 @@ class RiskRatingService:
         summary["fields_pulled"] = fields
         summary["consent"] = _consent_block()
         return merged, summary
+
+    # ── data lineage ─────────────────────────────────────────────────────
+    def data_lineage(self, customer_query: str, requested_amount: float,
+                     consent: bool = True, purpose: Optional[str] = None,
+                     collateral: Optional[str] = None) -> Dict[str, Any]:
+        """Show, per scored criterion, the value used and which source it came from.
+
+        Demonstrates that the system pulls each field from the right place —
+        the company's own tables, the Bank of Israel register, the request, or
+        a computed feature.
+        """
+        base = self.store.resolve_record(customer_query)
+        table_sources = self.store.get_sources(base.get("customer_id", ""))
+        result = self.assess(customer_query, requested_amount, consent=consent,
+                             purpose=purpose, collateral=collateral)
+
+        rep = result.external_report or {}
+        bureau_fields = set(rep.get("fields_pulled", [])) if rep.get("status") == "ok" else set()
+        crit_by_id = {c.id: c for c in self.model.criteria}
+
+        rows: List[Dict[str, Any]] = []
+        for cs in result.breakdown:
+            crit = crit_by_id[cs.id]
+            if crit.is_derived:
+                field, source = f"derived:{crit.feature_name}", _DERIVED_LABEL
+            else:
+                field = crit.source
+                if field in bureau_fields:
+                    source = _BUREAU_LABEL
+                elif field in ("loan_purpose", "collateral"):
+                    source = _REQUEST_LABEL
+                elif field in table_sources:
+                    source = _TABLE_LABELS.get(table_sources[field], table_sources[field])
+                elif cs.missing:
+                    source = "— (חסר בכל המאגרים)"
+                else:
+                    source = "—"
+            rows.append({
+                "criterion": crit.label_he,
+                "field": field,
+                "value": None if cs.missing else cs.raw_value,
+                "source": source,
+                "sub_score": cs.risk,
+            })
+        return {
+            "customer_id": result.customer_id,
+            "full_name": result.full_name,
+            "score": result.score,
+            "decision": result.decision_id,
+            "lineage": rows,
+        }
 
     # ── audit trail ──────────────────────────────────────────────────────
     def audit_trail(self, customer_query: Optional[str] = None,

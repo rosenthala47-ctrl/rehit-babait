@@ -83,6 +83,22 @@ def _consent_line(report) -> str:
     return f"הסכמה:       ✓ {verb} · #{c['consent_id']}{extra}"
 
 
+def _fmt_raw(v) -> str:
+    if v is None:
+        return "— חסר בכל המאגרים"
+    if isinstance(v, float):
+        return str(int(v)) if v.is_integer() else f"{v:.2f}"
+    return str(v)
+
+
+def format_lineage(lin) -> str:
+    out = ["מקור הנתונים (Data Lineage) — מאיזה מאגר נשלף כל נתון:"]
+    for r in lin["lineage"]:
+        out.append(f"  • {r['criterion']}  =  {_fmt_raw(r['value'])}"
+                   f"   ←  {r['source']}")
+    return "\n".join(out)
+
+
 def format_audit(events) -> str:
     if not events:
         return "אין רשומות ביומן ההסכמות (הגדר RISK_CONSENT_LOG לשמירה מתמשכת)."
@@ -159,6 +175,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="הפעלת שיקול דעת (שכבת AI/היוריסטיקה שיכולה לאשר חריגה)")
     p.add_argument("--audit", action="store_true",
                    help="הצגת יומן ההסכמות והמשיכות (audit trail) של הלקוח")
+    p.add_argument("--sources", action="store_true",
+                   help="הצגת מקור הנתונים (data lineage) — מאיזה מאגר נשלף כל שדה")
     return p
 
 
@@ -219,6 +237,11 @@ def main(argv: List[str] | None = None) -> int:
     if note:
         print(note.strip())
     print(format_report(result))
+    if args.sources:
+        print()
+        print(format_lineage(service.data_lineage(
+            args.customer, amount, consent=args.consent,
+            purpose=args.purpose, collateral=args.collateral)))
     if result.adjudication:
         print(format_adjudication(result.adjudication))
     if args.audit:

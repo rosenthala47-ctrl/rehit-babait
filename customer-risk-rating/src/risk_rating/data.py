@@ -8,7 +8,7 @@ by id or by name — exactly what the AI needs before it can score anyone.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -74,9 +74,12 @@ def _clean(value: Any) -> Any:
 class DataStore:
     """Loads customer tables from a directory and serves merged records."""
 
-    def __init__(self, records: Dict[str, Dict[str, Any]], tables: List[str]):
+    def __init__(self, records: Dict[str, Dict[str, Any]], tables: List[str],
+                 sources: Optional[Dict[str, Dict[str, str]]] = None):
         self._records = records
         self.tables = tables
+        # per-customer, per-field origin: {customer_id: {field: source_filename}}
+        self._sources = sources or {}
 
     # ── loading ──────────────────────────────────────────────────────────
     @classmethod
@@ -95,6 +98,7 @@ class DataStore:
                 f"no CSV/Excel tables found in {directory}")
 
         records: Dict[str, Dict[str, Any]] = {}
+        sources: Dict[str, Dict[str, str]] = {}
         loaded: List[str] = []
         for path in files:
             df = cls._read(path)
@@ -110,18 +114,20 @@ class DataStore:
                     continue
                 cid = str(cid).strip()
                 rec = records.setdefault(cid, {"customer_id": cid})
+                src = sources.setdefault(cid, {})
                 for col in df.columns:
                     if col == "customer_id":
                         continue
                     val = _clean(row[col])
                     if val is not None:
                         rec[col] = val
+                        src[col] = path.name          # remember which table it came from
 
         if not records:
             raise ValueError(
                 f"tables in {directory} contain no 'customer_id' column")
 
-        return cls(records=records, tables=loaded)
+        return cls(records=records, tables=loaded, sources=sources)
 
     @staticmethod
     def _read(path: Path):
@@ -164,6 +170,10 @@ class DataStore:
         if rec is None:
             raise CustomerNotFound(f"לא נמצא לקוח עם מזהה '{customer_id}'")
         return dict(rec)
+
+    def get_sources(self, customer_id: str) -> Dict[str, str]:
+        """Which company table each of this customer's fields came from."""
+        return dict(self._sources.get(str(customer_id).strip(), {}))
 
     def resolve(self, query: str) -> str:
         """Resolve a query to a single customer_id.

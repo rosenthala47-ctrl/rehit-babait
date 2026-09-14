@@ -12,9 +12,19 @@ def store():
 
 def test_loads_all_customers(store):
     customers = store.list_customers()
-    assert len(customers) == 9
+    assert len(customers) == 10
     ids = {cid for cid, _ in customers}
-    assert {"C1001", "C1008", "C1009"} <= ids
+    assert {"C1001", "C1008", "C1009", "C1010"} <= ids
+
+
+def test_field_provenance(store):
+    """Each field remembers which company table it came from."""
+    src = store.get_sources("C1010")               # Yosef
+    assert src["age"] == "demographics.csv"
+    assert src["monthly_income"] == "employment.csv"
+    assert src["overdraft_days_12m"] == "banking.csv"
+    # credit fields are NOT in the company tables (they come from the bureau)
+    assert "credit_utilization" not in src
 
 
 def test_record_merges_all_tables(store):

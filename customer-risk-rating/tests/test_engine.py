@@ -85,6 +85,18 @@ def test_model_has_expanded_criteria(service):
     assert len(result.breakdown) == 17
 
 
+def test_data_lineage_routes_each_field_to_its_source(service):
+    """The system pulls each field from the right database (Yosef, by ת\"ז)."""
+    lin = service.data_lineage("358024917", 100000)
+    by_field = {r["field"]: r["source"] for r in lin["lineage"]}
+    assert by_field["external_bureau_score"] == "מרשם נתוני אשראי (בנק ישראל)"
+    assert by_field["credit_utilization"] == "מרשם נתוני אשראי (בנק ישראל)"
+    assert by_field["monthly_income"] == "טבלת תעסוקה"
+    assert by_field["overdraft_days_12m"] == "טבלת עו\"ש / בנק"
+    assert by_field["age"] == "טבלת דמוגרפיה"
+    assert by_field["derived:dti"] == "מחושב מנתונים שנשלפו"
+
+
 def test_existing_leverage_feature():
     from risk_rating.features import get_feature
     fn = get_feature("existing_leverage")
