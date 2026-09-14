@@ -212,6 +212,8 @@ const COMPANY = {
   C1008: { full_name:"רון גולן", national_id:"089012567", age:41, marital_status:"divorced", employment_status:"employed_permanent", monthly_income:12000, tenure_months:30, overdraft_days_12m:60, avg_balance:2000 },
   // שני לקוחות בשם "יוסי כהן" — נבדלים בת"ז ובעיר (בדיוק מה שקורה בפועל)
   C1009: { full_name:"יוסי כהן", national_id:"311478502", age:51, marital_status:"married", employment_status:"self_employed", monthly_income:15000, tenure_months:200, overdraft_days_12m:10, avg_balance:8000, city:"חיפה" },
+  // יוסף — נתונים מפוזרים בין המאגרים; נתוני האשראי (כשל/כונס, ניצול, דירוג) מגיעים מבנק ישראל
+  C1010: { full_name:"יוסף שמעוני", national_id:"358024917", age:40, marital_status:"married", employment_status:"employed_permanent", monthly_income:12000, tenure_months:48, overdraft_days_12m:20, avg_balance:3000, city:"רמת גן" },
 };
 
 // ── "מרשם נתוני האשראי של בנק ישראל" — ממופתח לפי ת"ז ─────────────────────────
@@ -225,6 +227,7 @@ const BUREAU = {
   "012345678": { external_bureau_score:760, monthly_debt_payments:0,    missed_payments_12m:0, defaults:0, credit_utilization:0.10, oldest_account_years:30, total_debt:0,      hard_inquiries_6m:0 },
   "089012567": { external_bureau_score:560, monthly_debt_payments:3200, missed_payments_12m:4, defaults:2, credit_utilization:0.85, oldest_account_years:9,  total_debt:75000,  hard_inquiries_6m:4 },
   "311478502": { external_bureau_score:700, monthly_debt_payments:5200, missed_payments_12m:0, defaults:0, credit_utilization:0.50, oldest_account_years:25, total_debt:180000, hard_inquiries_6m:1 },
+  "358024917": { external_bureau_score:480, monthly_debt_payments:3000, missed_payments_12m:2, defaults:1, credit_utilization:0.80, oldest_account_years:9,  total_debt:90000,  hard_inquiries_6m:3 },
 };
 
 // ── מנוע הניקוד (מראה את engine.py) ──────────────────────────────────────────
