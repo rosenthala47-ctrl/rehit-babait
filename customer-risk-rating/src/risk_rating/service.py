@@ -11,13 +11,14 @@ talks to: give it a customer (by name or id) and a requested amount, and it
 """
 from __future__ import annotations
 
-import datetime
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .adjudicate import adjudicate as _adjudicate
 from .bureau import BureauError, CreditBureauClient, get_bureau_client
 from .config import ScoringModel
+from .consent import ConsentLedger
 from .data import DataStore
 from .engine import RiskEngine, RiskResult
 from .explain import explain as _explain
@@ -31,12 +32,16 @@ DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "sample"
 class RiskRatingService:
     def __init__(self, data_dir: str | Path = DEFAULT_DATA_DIR,
                  config_path: str | Path = DEFAULT_CONFIG,
-                 bureau: Optional[CreditBureauClient] = None):
+                 bureau: Optional[CreditBureauClient] = None,
+                 consent_ledger: Optional[ConsentLedger] = None):
         self.store = DataStore.from_directory(data_dir)
         self.model = ScoringModel.load(config_path)
         self.engine = RiskEngine(self.model)
         # the connector to the Bank of Israel credit register (mock by default)
         self.bureau = bureau if bureau is not None else get_bureau_client()
+        # consent + audit trail (persists to RISK_CONSENT_LOG if set, else in-memory)
+        self.consent_ledger = consent_ledger if consent_ledger is not None \
+            else ConsentLedger(os.environ.get("RISK_CONSENT_LOG"))
 
     # ── queries ──────────────────────────────────────────────────────────
     def list_customers(self) -> List[Tuple[str, str]]:
@@ -68,7 +73,8 @@ class RiskRatingService:
             ``full_secured``, ``guarantor`` — a request-level input.
         """
         record = self.store.resolve_record(customer_query)
-        record, report = self._pull_credit_report(record, consent, consent_ref)
+        record, report = self._pull_credit_report(
+            record, consent, consent_ref, requested_amount, purpose)
         # request-level fields (Conditions / Collateral) live on the request,
         # not on the customer — inject them so criteria can reference them.
         request_fields = {"requested_amount": requested_amount}
@@ -85,13 +91,16 @@ class RiskRatingService:
                 result, record, self.model, use_ai=use_ai).to_dict()
         return result
 
-    # ── credit register integration ──────────────────────────────────────
+    # ── credit register integration + consent flow ───────────────────────
     def _pull_credit_report(self, record: Dict[str, Any], consent: bool,
-                            consent_ref: Optional[str]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """Fetch the credit report and merge it into the record.
+                            consent_ref: Optional[str], requested_amount: float,
+                            purpose: Optional[str]
+                            ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Record/verify consent, fetch the credit report, and merge it in.
 
-        Returns ``(merged_record, report_summary)``. The record is never
-        mutated in place.
+        Returns ``(merged_record, report_summary)``. Every pull (and the
+        consent behind it) is written to the audit-trail ledger. The record is
+        never mutated in place.
         """
         national_id = record.get("national_id")
 
@@ -103,24 +112,57 @@ class RiskRatingService:
             return record, {"status": "no_national_id",
                             "message": "אין ת\"ז ללקוח — לא ניתן לפנות למרשם האשראי."}
 
-        if not consent_ref:
-            stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
-            consent_ref = f"CONSENT-{record.get('customer_id', 'NA')}-{stamp}"
+        # consent flow: reuse an active consent, or record a fresh grant now.
+        if consent_ref:
+            grant = {"consent_id": consent_ref, "granted_at": None, "expires_at": None}
+            reused = True
+        else:
+            grant = self.consent_ledger.active_consent(national_id)
+            reused = grant is not None
+            if grant is None:
+                grant = self.consent_ledger.grant(
+                    national_id, record.get("customer_id"), purpose,
+                    requested_amount, via="loan-request")
+        consent_id = grant["consent_id"]
+
+        def _consent_block() -> Dict[str, Any]:
+            return {"consent_id": consent_id, "granted_at": grant.get("granted_at"),
+                    "expires_at": grant.get("expires_at"), "reused": reused}
 
         try:
-            report = self.bureau.fetch(national_id, consent_ref=consent_ref)
+            report = self.bureau.fetch(national_id, consent_ref=consent_id)
         except BureauError as exc:
-            return record, {"status": "error", "message": str(exc)}
+            self.consent_ledger.record_pull(consent_id, national_id,
+                                            self.bureau.source, [], status="error")
+            return record, {"status": "error", "message": str(exc),
+                            "consent": _consent_block()}
 
         if report is None:
+            self.consent_ledger.record_pull(consent_id, national_id,
+                                            self.bureau.source, [], status="not_found")
             return record, {"status": "not_found",
-                            "message": "הלקוח אינו רשום במרשם נתוני האשראי."}
+                            "message": "הלקוח אינו רשום במרשם נתוני האשראי.",
+                            "consent": _consent_block()}
 
+        fields = sorted(report.as_record().keys())
+        self.consent_ledger.record_pull(consent_id, national_id, report.source,
+                                        fields, status="ok")
         merged = {**record, **report.as_record()}
         summary = report.summary()
         summary["status"] = "ok"
-        summary["fields_pulled"] = sorted(report.as_record().keys())
+        summary["fields_pulled"] = fields
+        summary["consent"] = _consent_block()
         return merged, summary
+
+    # ── audit trail ──────────────────────────────────────────────────────
+    def audit_trail(self, customer_query: Optional[str] = None,
+                    limit: int = 200) -> List[Dict[str, Any]]:
+        """Consent/pull events (national id masked). Optionally for one customer."""
+        nid = None
+        if customer_query:
+            rec = self.store.resolve_record(customer_query)
+            nid = rec.get("national_id")
+        return self.consent_ledger.audit_view(nid, limit)
 
     # ── convenience wrappers ─────────────────────────────────────────────
     def assess_dict(self, customer_query: str, requested_amount: float,

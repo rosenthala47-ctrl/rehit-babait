@@ -18,6 +18,11 @@ env/
 .env
 .env.*
 
+# consent / audit ledger (may contain personal data — never commit)
+*.consent.jsonl
+data/consent_ledger.jsonl
+consent_ledger.jsonl
+
 # OS / editor
 .DS_Store
 .idea/

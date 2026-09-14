@@ -265,8 +265,10 @@ function pullCreditReport(company, consent) {
   const nid = canonId(company.national_id);
   const row = BUREAU[nid];
   if (!row) return { report: { status: "not_found", message: "הלקוח אינו רשום במרשם נתוני האשראי." }, record: { ...company } };
+  const consentId = "CONSENT-" + nid.slice(-4) + "-" + Date.now().toString(36).toUpperCase();
   return {
-    report: { status: "ok", bureau_score: row.external_bureau_score, national_id_masked: "•••••" + nid.slice(-4), retrieved_at: new Date().toISOString().slice(0, 19) + "Z" },
+    report: { status: "ok", bureau_score: row.external_bureau_score, national_id_masked: "•••••" + nid.slice(-4),
+              retrieved_at: new Date().toISOString().slice(0, 19) + "Z", consent_id: consentId },
     record: { ...company, ...row },
   };
 }
@@ -388,7 +390,7 @@ function render(company, id, amount, consent, purpose, collateral, doAdjudicate)
   const bureau = document.getElementById("bureau");
   if (res.report.status === "ok") {
     bureau.className = "bureau ok";
-    bureau.textContent = `🏦 נתוני אשראי נשלפו ממרשם בנק ישראל · דירוג לשכה ${res.report.bureau_score} · ת"ז ${res.report.national_id_masked} · ${res.report.retrieved_at}`;
+    bureau.textContent = `🏦 נתוני אשראי נשלפו ממרשם בנק ישראל · דירוג לשכה ${res.report.bureau_score} · ת"ז ${res.report.national_id_masked} · הסכמה #${res.report.consent_id}`;
   } else {
     bureau.className = "bureau warn";
     bureau.textContent = "🏦 " + res.report.message;

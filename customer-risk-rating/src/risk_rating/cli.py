@@ -74,6 +74,29 @@ def _bureau_line(report) -> str:
     return f"מרשם אשראי:  ⚠ {report.get('message', 'לא נשלף')}"
 
 
+def _consent_line(report) -> str:
+    c = (report or {}).get("consent")
+    if not c:
+        return ""
+    verb = "בתוקף (הסכמה קיימת)" if c.get("reused") else "נרשמה כעת"
+    extra = f" · ניתנה {c['granted_at']}" if c.get("granted_at") else ""
+    return f"הסכמה:       ✓ {verb} · #{c['consent_id']}{extra}"
+
+
+def format_audit(events) -> str:
+    if not events:
+        return "אין רשומות ביומן ההסכמות (הגדר RISK_CONSENT_LOG לשמירה מתמשכת)."
+    out = ["יומן ביקורת (הסכמות ומשיכות):"]
+    for e in events:
+        if e.get("type") == "grant":
+            out.append(f"  • הסכמה  {e['consent_id']} · ת\"ז {e['national_id']} · "
+                       f"מטרה {e.get('purpose') or '—'} · בתוקף עד {e['expires_at']}")
+        else:
+            out.append(f"  • משיכה  {e['consent_id']} · {e.get('status')} · "
+                       f"{len(e.get('fields_pulled', []))} שדות · {e['at']}")
+    return "\n".join(out)
+
+
 def format_report(result: RiskResult) -> str:
     icon = _DECISION_ICON.get(result.decision_id, "•")
     width = 60
@@ -89,6 +112,9 @@ def format_report(result: RiskResult) -> str:
     bureau = _bureau_line(result.external_report)
     if bureau:
         out.append(bureau)
+    consent = _consent_line(result.external_report)
+    if consent:
+        out.append(consent)
     out.append(line)
     out.append(f"ציון סיכון:  {result.score:.1f} / 10   (מעוגל: {result.score_rounded})")
     out.append(f"החלטה:       {icon}  {result.decision_label_he}")
@@ -131,6 +157,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="בטוחה (full_secured / partial_secured / guarantor / unsecured)")
     p.add_argument("--adjudicate", action="store_true",
                    help="הפעלת שיקול דעת (שכבת AI/היוריסטיקה שיכולה לאשר חריגה)")
+    p.add_argument("--audit", action="store_true",
+                   help="הצגת יומן ההסכמות והמשיכות (audit trail) של הלקוח")
     return p
 
 
@@ -193,6 +221,9 @@ def main(argv: List[str] | None = None) -> int:
     print(format_report(result))
     if result.adjudication:
         print(format_adjudication(result.adjudication))
+    if args.audit:
+        print()
+        print(format_audit(service.audit_trail(args.customer)))
     if args.explain or args.ai:
         print("\nהסבר:")
         print(explain(result, use_ai=args.ai))

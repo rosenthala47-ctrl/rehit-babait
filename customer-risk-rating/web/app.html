@@ -210,7 +210,8 @@ function render(d) {
   const rep = d.external_report;
   if (rep && rep.status === "ok") {
     bureau.className = "bureau ok";
-    bureau.textContent = `🏦 נתוני אשראי נשלפו ממרשם בנק ישראל · דירוג לשכה ${rep.bureau_score} · ת"ז ${rep.national_id_masked} · ${rep.retrieved_at}`;
+    const cons = rep.consent ? ` · הסכמה #${rep.consent.consent_id}` : "";
+    bureau.textContent = `🏦 נתוני אשראי נשלפו ממרשם בנק ישראל · דירוג לשכה ${rep.bureau_score} · ת"ז ${rep.national_id_masked}${cons}`;
   } else if (rep) {
     bureau.className = "bureau warn";
     bureau.textContent = "🏦 " + (rep.message || "נתוני אשראי לא נשלפו");

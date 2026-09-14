@@ -96,3 +96,15 @@ def score(req: ScoreRequest) -> JSONResponse:
     if req.explain or req.use_ai:
         payload["explanation"] = explain(result, use_ai=req.use_ai and ai_available())
     return JSONResponse(content=payload)
+
+
+@app.get("/api/audit")
+def audit(customer: Optional[str] = None) -> dict:
+    """Consent + credit-pull audit trail (national id masked)."""
+    try:
+        return {"events": service.audit_trail(customer)}
+    except AmbiguousCustomer as exc:
+        raise HTTPException(status_code=409,
+                            detail={"message": str(exc), "candidates": exc.candidates})
+    except CustomerNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

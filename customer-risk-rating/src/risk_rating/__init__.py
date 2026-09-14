@@ -9,6 +9,7 @@ from __future__ import annotations
 from .adjudicate import Adjudication, adjudicate
 from .bureau import (CreditBureauClient, CreditReport, HttpBankOfIsraelClient,
                      MockBankOfIsraelClient, get_bureau_client)
+from .consent import ConsentLedger
 from .config import ScoringModel
 from .data import AmbiguousCustomer, CustomerNotFound, DataStore
 from .engine import CriterionScore, RiskEngine, RiskResult
@@ -31,6 +32,7 @@ __all__ = [
     "MockBankOfIsraelClient",
     "HttpBankOfIsraelClient",
     "get_bureau_client",
+    "ConsentLedger",
     "adjudicate",
     "Adjudication",
     "explain",
