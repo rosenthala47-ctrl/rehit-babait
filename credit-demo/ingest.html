@@ -1,0 +1,427 @@
+<!-- עותק מתארח של customer-risk-rating/web/ingest_review.html — מוגש דרך GitHub Pages בכתובת /rehit-babait/credit-demo/ingest.html -->
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>אישור מיפוי נתונים — דירוג סיכון לקוח</title>
+<style>
+  :root {
+    --bg:#f1f5f9; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --brand:#1d4ed8; --brand-ink:#1e3a8a; --approve:#16a34a; --review:#d97706; --reject:#dc2626;
+    --shadow:0 10px 30px rgba(15,23,42,.08);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",Arial,"Noto Sans Hebrew",sans-serif; line-height:1.5; }
+  .wrap { max-width:960px; margin:0 auto; padding:24px 16px 60px; }
+  header h1 { margin:0 0 4px; font-size:1.7rem; }
+  header p { margin:0 0 8px; color:var(--muted); }
+  .tag { display:inline-block; font-size:.72rem; background:#e0e7ff; color:#3730a3;
+    padding:3px 10px; border-radius:999px; margin-bottom:16px; }
+  .nav { margin-bottom:16px; font-size:.9rem; }
+  .nav a { color:var(--brand); text-decoration:none; font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:var(--shadow); padding:20px; margin-bottom:20px; }
+  .file-title { display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.05rem; margin-bottom:4px; }
+  .grain { font-size:.72rem; padding:2px 9px; border-radius:999px; font-weight:600; }
+  .grain.cust { background:#eff6ff; color:#1e40af; }
+  .grain.txn { background:#fef3c7; color:#92400e; }
+  .file-sub { color:var(--muted); font-size:.85rem; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; font-size:.8rem; }
+  tr.flag { background:#fef2f2; }
+  .col-name { font-weight:600; }
+  .samples { color:var(--muted); font-size:.78rem; }
+  select { width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:8px;
+    background:#fff; color:var(--ink); font-size:.85rem; font-family:inherit; }
+  tr.flag select { border-color:var(--reject); }
+  .conf { display:flex; align-items:center; gap:6px; min-width:96px; }
+  .conf-bar { flex:1; height:7px; background:#eef2f7; border-radius:999px; overflow:hidden; }
+  .conf-bar > span { display:block; height:100%; border-radius:999px; }
+  .conf-num { font-size:.75rem; color:var(--muted); min-width:34px; }
+  .status { font-size:.8rem; white-space:nowrap; }
+  .status.ok { color:var(--approve); }
+  .status.rev { color:var(--reject); font-weight:600; }
+  .banner { padding:12px 14px; border-radius:12px; font-size:.92rem; margin-bottom:16px; }
+  .banner.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+  .banner.ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+  button { padding:13px 20px; font-size:1.05rem; font-weight:600; color:#fff;
+    background:var(--brand); border:0; border-radius:10px; cursor:pointer; }
+  button:hover { background:var(--brand-ink); }
+  .results td, .results th { font-size:.9rem; }
+  .badge { padding:4px 12px; border-radius:999px; font-weight:700; color:#fff; font-size:.85rem; }
+  .ko { color:var(--reject); font-weight:700; font-size:.82rem; }
+  .muted { color:var(--muted); }
+  footer { color:var(--muted); font-size:.8rem; text-align:center; margin-top:8px; }
+  @media (max-width:640px){ .samples{ display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>אישור מיפוי נתונים 🔎</h1>
+    <p>המערכת קראה את קבצי האקסל של החברה וזיהתה לבד מה כל עמודה אומרת. עמודות בהן היא
+       <b>לא בטוחה מספיק</b> מסומנות באדום — אשר או תקן בלחיצה, ואז נחשב ציון אחד לכל לקוח.</p>
+    <span class="tag">הדגמה · כל החישוב בדפדפן · בפרודקשן ה-AI מציע והמיפוי המאושר נשמר לשימוש חוזר</span>
+    <div class="nav">↩ <a href="index.html">חזרה לדמו הניקוד</a></div>
+  </header>
+
+  <div id="review"></div>
+
+  <div class="card" style="text-align:center;">
+    <button id="apply">✓ אשר מיפוי ונקד את כל הלקוחות</button>
+    <div class="muted" style="margin-top:8px; font-size:.82rem;">
+      עמודות בספק שלא תתקן — לא ייכנסו לניקוד (עדיף לדלג מאשר לנחש).</div>
+  </div>
+
+  <div id="results"></div>
+
+  <footer>מנוע דירוג דטרמיניסטי ומבוקר · שכבת קליטה חכמה · גרסת הדגמה</footer>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// שדות קנוניים (mirror ingest.py) — id חייב להתאים ל-source במודל הניקוד
+// ─────────────────────────────────────────────────────────────────────────────
+const FIELDS = [
+  { id:"national_id", label:"תעודת זהות (ת\"ז)", key:true, dtype:"text", agg:"first",
+    aliases:["national_id","id_number","tz","תז","תעודת זהות","ת.ז","מספר זהות","זהות"] },
+  { id:"customer_id", label:"מזהה לקוח", dtype:"text", agg:"first",
+    aliases:["customer_id","client_id","מזהה לקוח","קוד לקוח","מספר לקוח"] },
+  { id:"full_name", label:"שם הלקוח", dtype:"text", agg:"first",
+    aliases:["full_name","name","שם","שם מלא","שם הלקוח"] },
+  { id:"city", label:"עיר", dtype:"text", agg:"first", aliases:["city","עיר","יישוב","ישוב"] },
+  { id:"age", label:"גיל", dtype:"int", agg:"last", aliases:["age","גיל"] },
+  { id:"marital_status", label:"מצב משפחתי", dtype:"cat", agg:"last",
+    aliases:["marital_status","מצב משפחתי","סטטוס משפחתי"] },
+  { id:"employment_status", label:"מצב תעסוקתי", dtype:"cat", agg:"last",
+    aliases:["employment_status","employment","מצב תעסוקתי","סטטוס תעסוקה","תעסוקה"] },
+  { id:"monthly_income", label:"הכנסה חודשית (נטו)", dtype:"num", agg:"mean",
+    aliases:["monthly_income","income","salary","net_income","הכנסה","שכר","שכר נטו","משכורת","הכנסה חודשית"] },
+  { id:"tenure_months", label:"ותק בעבודה (חודשים)", dtype:"int", agg:"max",
+    aliases:["tenure_months","seniority","ותק","ותק בעבודה","ותק תעסוקתי"] },
+  { id:"employer", label:"מעסיק", dtype:"text", agg:"last", aliases:["employer","מעסיק","מקום עבודה","חברה"] },
+  { id:"avg_balance", label:"יתרה ממוצעת בעו\"ש", dtype:"num", agg:"mean",
+    aliases:["avg_balance","balance","יתרה","יתרה ממוצעת","יתרת עוש","יתרה בעוש"] },
+  { id:"overdraft_days_12m", label:"ימי חריגה ממסגרת (12ח')", dtype:"int", agg:"sum",
+    aliases:["overdraft_days","overdraft_days_12m","ימי חריגה","חריגה ממסגרת"] },
+  { id:"external_bureau_score", label:"דירוג אשראי (לשכה)", dtype:"num", agg:"last",
+    aliases:["bureau_score","credit_score","score","דירוג אשראי","ציון אשראי","דירוג לשכה"] },
+  { id:"missed_payments_12m", label:"פיגורים בתשלום (12ח')", dtype:"int", agg:"sum",
+    aliases:["missed_payments","late_payments","arrears","פיגורים","איחורים","פיגורים בתשלום"] },
+  { id:"defaults", label:"כשלי אשראי / הוצל\"פ / כונס", dtype:"int", agg:"max",
+    aliases:["defaults","enforcement","כשלי אשראי","כשל אשראי","הוצאה לפועל","הוצלפ","כונס","חדלות פירעון"] },
+  { id:"credit_utilization", label:"ניצול מסגרות אשראי", dtype:"ratio", agg:"mean",
+    aliases:["credit_utilization","utilization","util","ניצול מסגרת","ניצול אשראי","ניצול מסגרות"] },
+  { id:"oldest_account_years", label:"ותק היסטוריית אשראי (שנים)", dtype:"num", agg:"max",
+    aliases:["oldest_account_years","credit_history_years","ותק אשראי","שנות היסטוריה"] },
+  { id:"hard_inquiries_6m", label:"בקשות אשראי אחרונות (6ח')", dtype:"int", agg:"sum",
+    aliases:["hard_inquiries","inquiries","בקשות אשראי","שאילתות אשראי"] },
+  { id:"total_debt", label:"סך חוב", dtype:"num", agg:"sum",
+    aliases:["total_debt","debt","סך חוב","חוב כולל","חוב"] },
+  { id:"monthly_debt_payments", label:"החזרי חוב חודשיים", dtype:"num", agg:"sum",
+    aliases:["monthly_debt_payments","debt_payments","החזר חודשי","תשלומי חוב"] },
+  { id:"restricted_account", label:"חשבון מוגבל", dtype:"bool", agg:"any",
+    aliases:["restricted_account","restricted","חשבון מוגבל","מוגבל"] },
+  { id:"bankruptcy", label:"פשיטת רגל / כונס", dtype:"bool", agg:"any",
+    aliases:["bankruptcy","insolvency","פשיטת רגל","פשר"] },
+];
+const FIELD_BY_ID = Object.fromEntries(FIELDS.map(f => [f.id, f]));
+const KEY_FIELDS = ["national_id","customer_id"];
+
+// ── נרמול כותרות עברית (mirror normalize_header) ──────────────────────────────
+const HE_FINALS = { "ם":"מ","ן":"נ","ץ":"צ","ף":"פ","ך":"כ" };
+function norm(text){
+  let s = String(text).normalize("NFKD").replace(/[֑-ׇ]/g,""); // drop niqqud
+  s = s.toLowerCase().trim();
+  s = s.split("").map(ch => HE_FINALS[ch] || ch).join("");
+  s = s.replace(/["'`׳״.\-_/\\|()\[\]{}:,;]+/g,"").replace(/\s+/g,"");
+  return s;
+}
+const ALIAS_INDEX = {};
+for (const f of FIELDS) for (const a of [f.id, f.label, ...f.aliases]) {
+  const n = norm(a); if (!(n in ALIAS_INDEX)) ALIAS_INDEX[n] = f.id;
+}
+function mapColumn(col){
+  const n = norm(col);
+  if (!n) return { field:null, conf:0 };
+  if (n in ALIAS_INDEX) return { field:ALIAS_INDEX[n], conf:0.97 };
+  let best = { field:null, conf:0 };
+  for (const [an, fid] of Object.entries(ALIAS_INDEX)) {
+    if (an.length < 3) continue;
+    if (an.includes(n) || n.includes(an)) {
+      const ratio = Math.min(an.length,n.length)/Math.max(an.length,n.length);
+      const conf = 0.6 + 0.3*ratio;
+      if (conf > best.conf) best = { field:fid, conf };
+    }
+  }
+  return best;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "האקסלים" של החברה — שמות עמודות שונים לגמרי בכל קובץ (mirror data/messy_demo)
+// ─────────────────────────────────────────────────────────────────────────────
+const FILES = [
+  { name:"01_לקוחות.xlsx", columns:["תעודת זהות","שם מלא","גיל","מצב משפחתי","עיר"],
+    rows:[["034512789","יוסי כהן","34","married","תל אביב"],
+          ["023456781","דוד מזרחי","45","divorced","באר שבע"],
+          ["358024917","יוסף שמעוני","40","married","רמת גן"],
+          ["067890345","אבי פרץ","39","married","ראשון לציון"]] },
+  { name:"02_payroll.xlsx", columns:["תז","שכר נטו","ותק בעבודה","מצב תעסוקתי","מעסיק"],
+    rows:[["034512789","18000","40","employed_permanent","הייטק"],
+          ["023456781","4000","0","unemployed",""],
+          ["358024917","12000","48","employed_permanent","מפעל"],
+          ["067890345","22000","84","self_employed","עצמאי"]] },
+  { name:"03_בנק_חודשי.xlsx", columns:["ת.ז","חודש","יתרה בעוש","ימי חריגה ממסגרת"],
+    rows:[["034512789","01/2026","20000","1"],["034512789","02/2026","22000","0"],["034512789","03/2026","24000","2"],
+          ["023456781","01/2026","-2000","40"],["023456781","02/2026","-4000","30"],["023456781","03/2026","-3000","30"],
+          ["358024917","01/2026","3000","10"],["358024917","02/2026","3000","5"],["358024917","03/2026","3000","5"],
+          ["067890345","01/2026","15000","10"],["067890345","02/2026","16000","5"],["067890345","03/2026","14000","10"]] },
+  { name:"04_credit_report.xlsx", columns:["national_id","credit_score","missed_payments","defaults","utilization","restricted_account"],
+    rows:[["034512789","720","0","0","35","0"],
+          ["023456781","520","3","1","95","0"],
+          ["358024917","480","2","1","80","1"],
+          ["067890345","690","1","0","55","0"]] },
+];
+
+const THRESHOLD = 0.8;
+const state = [];   // per file: { grain, key, maps:[{col, field, conf}] }
+
+// grain: transaction if the key column repeats
+function detectGrain(file, keyIdx){
+  if (keyIdx < 0) return "customer";
+  const seen = new Set();
+  for (const r of file.rows){ const k = r[keyIdx]; if (seen.has(k)) return "transaction"; seen.add(k); }
+  return "customer";
+}
+
+function buildState(){
+  state.length = 0;
+  for (const file of FILES){
+    const maps = file.columns.map(col => ({ col, ...mapColumn(col) }));
+    let keyIdx = -1;
+    for (const want of KEY_FIELDS){ const i = maps.findIndex(m => m.field === want); if (i>=0){ keyIdx=i; break; } }
+    state.push({ grain: detectGrain(file, keyIdx), maps });
+  }
+}
+
+function renderReview(){
+  const root = document.getElementById("review");
+  let flagged = 0;
+  state.forEach(s => s.maps.forEach(m => { if (!m.field || m.conf < THRESHOLD) flagged++; }));
+  root.innerHTML = "";
+
+  const banner = document.createElement("div");
+  banner.className = "banner " + (flagged ? "warn" : "ok");
+  banner.innerHTML = flagged
+    ? `⚠ <b>${flagged}</b> עמודות דורשות את אישורך (סומנו באדום). אשר, תקן, או השאר "התעלם".`
+    : "✓ כל העמודות זוהו ברמת ביטחון גבוהה.";
+  root.appendChild(banner);
+
+  FILES.forEach((file, fi) => {
+    const s = state[fi];
+    const card = document.createElement("div"); card.className = "card";
+    const gr = s.grain === "transaction"
+      ? `<span class="grain txn">טבלת תנועה → צבירה</span>`
+      : `<span class="grain cust">רמת-לקוח</span>`;
+    card.innerHTML = `<div class="file-title">📄 ${file.name} ${gr}</div>
+      <div class="file-sub">${file.rows.length} שורות · ${file.columns.length} עמודות</div>`;
+    const tbl = document.createElement("table");
+    tbl.innerHTML = `<thead><tr><th>עמודה בקובץ</th><th>דוגמאות</th><th>שדה ניקוד (זיהוי המערכת)</th>
+      <th>ביטחון</th><th>סטטוס</th></tr></thead>`;
+    const tb = document.createElement("tbody");
+    s.maps.forEach((m, ci) => {
+      const flag = (!m.field || m.conf < THRESHOLD);
+      const tr = document.createElement("tr"); if (flag) tr.className = "flag";
+      const samples = file.rows.slice(0,3).map(r => r[ci]).filter(x=>x!=="").join(" · ");
+      const sel = document.createElement("select");
+      sel.innerHTML = `<option value="">— התעלם —</option>` +
+        FIELDS.map(f => `<option value="${f.id}" ${f.id===m.field?"selected":""}>${f.label}</option>`).join("");
+      sel.addEventListener("change", () => {
+        m.field = sel.value || null; m.conf = sel.value ? 1.0 : 0; m.manual = true;
+        renderReview();
+      });
+      const color = m.conf>=0.8 ? "var(--approve)" : m.conf>0 ? "var(--review)" : "var(--reject)";
+      const td = document.createElement("td"); td.appendChild(sel);
+      tr.innerHTML = `<td class="col-name">${m.col}</td><td class="samples">${samples||"—"}</td>`;
+      tr.appendChild(td);
+      const c = document.createElement("td");
+      c.innerHTML = `<div class="conf"><div class="conf-bar"><span style="width:${Math.round(m.conf*100)}%;background:${color}"></span></div>
+        <span class="conf-num">${Math.round(m.conf*100)}%</span></div>`;
+      tr.appendChild(c);
+      const st = document.createElement("td");
+      st.innerHTML = m.manual ? `<span class="status ok">✓ אושר ידנית</span>`
+        : flag ? `<span class="status rev">? לאישור</span>`
+        : `<span class="status ok">✓ זוהה</span>`;
+      tr.appendChild(st);
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); card.appendChild(tbl); root.appendChild(card);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// החלת המיפוי: צבירת תנועות, מיזוג לפי ת"ז, ניקוד
+// ─────────────────────────────────────────────────────────────────────────────
+const canonId = (v) => String(v).replace(/\D/g,"").padStart(9,"0");
+function coerce(field, value){
+  if (value===null || value===undefined || value==="") return null;
+  if (["num","ratio","int"].includes(field.dtype)){
+    let n = parseFloat(String(value).replace(/[,₪%\s]/g,""));
+    if (isNaN(n)) return null;
+    if (field.dtype==="ratio" && n>1.5) n = n/100;
+    if (field.dtype==="int") n = Math.round(n);
+    return n;
+  }
+  if (field.dtype==="bool"){
+    const s = String(value).trim().toLowerCase();
+    return ["1","true","yes","כן","מוגבל","פעיל"].includes(s) ? 1 : 0;
+  }
+  if (field.dtype==="cat") return String(value).trim().toLowerCase();
+  return String(value).trim();
+}
+const AGG = {
+  sum:a=>a.reduce((x,y)=>x+y,0), mean:a=>a.reduce((x,y)=>x+y,0)/a.length,
+  max:a=>Math.max(...a), min:a=>Math.min(...a), count:a=>a.length,
+  any:a=>a.some(x=>Number(x)>0)?1:0, first:a=>a[0], last:a=>a[a.length-1],
+};
+
+function buildRecords(){
+  const records = {}, sources = {};
+  FILES.forEach((file, fi) => {
+    const s = state[fi];
+    // apply only confident/approved columns; highest conf wins a field
+    const chosen = {};
+    s.maps.slice().sort((a,b)=>b.conf-a.conf).forEach(m => {
+      if (m.field && m.conf>=THRESHOLD && !(m.field in chosen)) chosen[m.field] = m.col;
+    });
+    const colIdx = Object.fromEntries(file.columns.map((c,i)=>[c,i]));
+    let keyField = KEY_FIELDS.find(k => k in chosen);
+    if (!keyField) return;
+    const keyCol = chosen[keyField];
+
+    // group rows by key
+    const groups = {};
+    for (const r of file.rows){ const k = r[colIdx[keyCol]]; if (!k) continue; (groups[k]=groups[k]||[]).push(r); }
+    for (const [k, grp] of Object.entries(groups)){
+      const canon = {};
+      for (const [fid, col] of Object.entries(chosen)){
+        const field = FIELD_BY_ID[fid], ci = colIdx[col];
+        let vals = grp.map(r => r[ci]).filter(v => v!=="" && v!=null);
+        if (s.grain==="transaction"){
+          if (["num","ratio","int"].includes(field.dtype) && ["sum","mean","max","min","count"].includes(field.agg)){
+            vals = vals.map(v=>parseFloat(String(v).replace(/[,₪%\s]/g,""))).filter(x=>!isNaN(x));
+            if (!vals.length && field.agg!=="count") continue;
+          }
+          if (!vals.length) continue;
+          canon[fid] = (AGG[field.agg]||AGG.last)(vals);
+        } else {
+          if (!vals.length) continue;
+          canon[fid] = vals[0];
+        }
+      }
+      const nid = canonId(canon.national_id || k);
+      const rec = records[nid] = records[nid] || {}; const src = sources[nid] = sources[nid] || {};
+      for (const [fid, v] of Object.entries(canon)){
+        const cv = coerce(FIELD_BY_ID[fid], v);
+        if (cv===null) continue;
+        if (!(fid in rec)){ rec[fid]=cv; src[fid]=file.name; }
+      }
+    }
+  });
+  for (const [nid, rec] of Object.entries(records)){
+    if (!rec.national_id) rec.national_id = nid;
+    if (!rec.customer_id) rec.customer_id = "C"+nid.slice(-6);
+  }
+  return { records, sources };
+}
+
+// ── מנוע ניקוד (mirror engine.py + scoring_model.yaml, subset needed) ─────────
+const MODEL = {
+  bands:[
+    { id:"bureau_score", w:0.10, src:"external_bureau_score", type:"num", bands:[[500,10],[580,8],[640,6],[700,4],[760,2],[Infinity,1]], missing:7 },
+    { id:"payment_history", w:0.10, src:"missed_payments_12m", type:"num", bands:[[0,1],[1,3],[2,5],[3,7],[Infinity,9]], missing:6 },
+    { id:"defaults", w:0.07, src:"defaults", type:"num", bands:[[0,1],[1,6],[Infinity,10]], missing:5 },
+    { id:"credit_utilization", w:0.06, src:"credit_utilization", type:"num", bands:[[0.30,1],[0.50,3],[0.70,5],[0.90,8],[Infinity,10]], missing:5 },
+    { id:"credit_history_length", w:0.04, src:"oldest_account_years", type:"num", bands:[[1,8],[3,6],[7,4],[15,2],[Infinity,1]], missing:5 },
+    { id:"recent_inquiries", w:0.03, src:"hard_inquiries_6m", type:"num", bands:[[0,1],[1,2],[2,4],[4,6],[6,8],[Infinity,10]], missing:4 },
+    { id:"affordability", w:0.15, src:"dti", type:"num", bands:[[0.20,1],[0.30,3],[0.40,5],[0.50,7],[0.70,9],[Infinity,10]], missing:8 },
+    { id:"income_level", w:0.07, src:"monthly_income", type:"num", bands:[[5000,10],[7000,8],[10000,6],[15000,4],[20000,3],[30000,2],[Infinity,1]], missing:8 },
+    { id:"existing_leverage", w:0.06, src:"existing_leverage", type:"num", bands:[[0.5,1],[1.0,3],[2.0,5],[3.0,7],[5.0,9],[Infinity,10]], missing:6 },
+    { id:"employment_status", w:0.05, src:"employment_status", type:"cat", map:{employed_permanent:1,civil_servant:1,self_employed:4,employed_temp:5,pensioner:4,student:6,unemployed:10}, unknown:7, missing:8 },
+    { id:"employment_tenure", w:0.02, src:"tenure_months", type:"num", bands:[[6,9],[12,7],[24,5],[36,3],[60,2],[Infinity,1]], missing:6 },
+    { id:"liquidity_savings", w:0.04, src:"avg_balance", type:"num", bands:[[0,10],[2000,8],[10000,5],[25000,3],[50000,2],[Infinity,1]], missing:6 },
+    { id:"banking_conduct", w:0.04, src:"overdraft_days_12m", type:"num", bands:[[0,1],[15,3],[45,5],[90,8],[Infinity,10]], missing:5 },
+    { id:"collateral", w:0.07, src:"collateral", type:"cat", map:{full_secured:1,partial_secured:4,guarantor:5,unsecured:7}, unknown:6, missing:6 },
+    { id:"loan_purpose", w:0.05, src:"loan_purpose", type:"cat", map:{debt_consolidation:3,home_renovation:3,vehicle:3,education:4,medical:4,business:5,life_event:5,consumption:6,investment:9,other:5}, unknown:5, missing:4 },
+    { id:"age", w:0.02, src:"age", type:"num", bands:[[20,6],[24,4],[60,1],[70,4],[Infinity,7]], missing:5 },
+    { id:"family_stability", w:0.03, src:"marital_status", type:"cat", map:{married:1,widowed:3,single:4,divorced:5}, unknown:4, missing:4 },
+  ],
+  knockouts:[
+    { id:"active_default", label:'כשל אשראי / הליך הוצל"פ פעיל', field:"defaults", gte:1 },
+    { id:"restricted_account", label:"חשבון מוגבל (בנק ישראל)", field:"restricted_account", gte:1 },
+    { id:"bankruptcy", label:"פשיטת רגל / כונס נכסים", field:"bankruptcy", gte:1 },
+  ],
+  decision:[{id:"approve",max:3,label:"אישור",color:"var(--approve)"},{id:"review",max:6,label:"בדיקה ידנית",color:"var(--review)"},{id:"reject",max:10,label:"דחייה",color:"var(--reject)"}],
+};
+const clamp = r => Math.max(1, Math.min(10, r));
+function derived(src, rec, amount){
+  if (src==="dti"){ const inc=rec.monthly_income; if(!inc||inc<=0) return null; return ((rec.monthly_debt_payments||0)+amount/60)/inc; }
+  if (src==="existing_leverage"){ const inc=rec.monthly_income; if(!inc||inc<=0) return null; if(rec.total_debt==null) return null; return rec.total_debt/(inc*12); }
+  return rec[src];
+}
+function score(rec, amount){
+  let total=0;
+  for (const c of MODEL.bands){
+    let raw = derived(c.src, rec, amount);
+    let risk;
+    if (raw==null || raw===""){ risk = clamp(c.missing); }
+    else if (c.type==="cat"){ const k=String(raw).toLowerCase(); risk = clamp(k in c.map ? c.map[k] : c.unknown); }
+    else { const v=Number(raw); risk=clamp(c.bands[c.bands.length-1][1]); for(const [mx,rk] of c.bands){ if(v<=mx){ risk=clamp(rk); break; } } }
+    total += c.w*risk;
+  }
+  total = clamp(total);
+  const rounded = clamp(Math.floor(total+0.5));
+  let band = MODEL.decision.find(b => rounded <= b.max);
+  const kos = MODEL.knockouts.filter(k => { const v=rec[k.field]; return v!=null && v!=="" && Number(v)>=k.gte; });
+  if (kos.length) band = MODEL.decision.find(b=>b.id==="reject");
+  return { score:total, band, knockouts:kos };
+}
+
+const FMT = { national_id:"ת\"ז", monthly_income:"הכנסה", avg_balance:"יתרה", external_bureau_score:"דירוג", credit_utilization:"ניצול", defaults:"כשלים", restricted_account:"מוגבל" };
+function fmtVal(v){ return typeof v==="number" ? (Number.isInteger(v)?v.toLocaleString("he-IL"):v.toFixed(2)) : v; }
+
+document.getElementById("apply").addEventListener("click", () => {
+  const { records, sources } = buildRecords();
+  const root = document.getElementById("results");
+  const card = document.createElement("div"); card.className = "card results";
+  card.innerHTML = `<div class="file-title">✓ תוצאה: רשומה קנונית אחת לכל ת"ז → ציון</div>
+    <div class="file-sub">${Object.keys(records).length} לקוחות, אוחדו מכל הקבצים (ת"ז זוהתה למרות 4 איותים שונים; טבלת הבנק נצברה).</div>`;
+  const tbl = document.createElement("table");
+  tbl.innerHTML = `<thead><tr><th>לקוח</th><th>נתונים שנשלפו (מוזגו)</th><th>ציון</th><th>החלטה</th></tr></thead>`;
+  const tb = document.createElement("tbody");
+  Object.values(records).sort((a,b)=>score(a,100000).score-score(b,100000).score).forEach(rec => {
+    const res = score(rec, 100000);
+    const pulled = ["national_id","monthly_income","avg_balance","external_bureau_score","credit_utilization","defaults","restricted_account"]
+      .filter(f => f in rec).map(f => `${FMT[f]}: <b>${fmtVal(rec[f])}</b>`).join(" · ");
+    const tr = document.createElement("tr");
+    const ko = res.knockouts.length ? `<div class="ko">⛔ נוק-אאוט: ${res.knockouts.map(k=>k.label).join("; ")}</div>` : "";
+    tr.innerHTML = `<td><b>${rec.full_name||rec.customer_id}</b><br><span class="muted" style="font-size:.78rem">${rec.customer_id}</span></td>
+      <td class="samples" style="font-size:.82rem;color:var(--ink)">${pulled}</td>
+      <td><b style="font-size:1.1rem">${res.score.toFixed(1)}</b><span class="muted">/10</span></td>
+      <td><span class="badge" style="background:${res.band.color}">${res.band.label}</span>${ko}</td>`;
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb); card.appendChild(tbl);
+  root.innerHTML = ""; root.appendChild(card);
+  card.scrollIntoView({ behavior:"smooth", block:"start" });
+});
+
+// init
+buildState();
+renderReview();
+</script>
+</body>
+</html>
