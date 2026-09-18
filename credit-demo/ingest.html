@@ -71,9 +71,11 @@
   <div id="review"></div>
 
   <div class="card" style="text-align:center;">
-    <button id="apply">✓ אשר מיפוי ונקד את כל הלקוחות</button>
+    <button id="apply">✓ אשר מיפוי, שמור ונקד</button>
+    <button id="download" style="display:none; background:#0f766e; margin-inline-start:8px;">⬇ הורד mappings.yaml</button>
     <div class="muted" style="margin-top:8px; font-size:.82rem;">
-      עמודות בספק שלא תתקן — לא ייכנסו לניקוד (עדיף לדלג מאשר לנחש).</div>
+      עמודות בספק שלא תתקן — לא ייכנסו לניקוד (עדיף לדלג מאשר לנחש).
+      &nbsp;·&nbsp; <a href="#" id="reset" style="color:var(--muted)">אפס מיפוי שמור</a></div>
   </div>
 
   <div id="results"></div>
@@ -160,6 +162,87 @@ function mapColumn(col){
   return best;
 }
 
+// ── חתימת מבנה טבלה + אחסון מיפוי (mirror table_signature + MappingBook) ──────
+function sha1(str){
+  function rotl(n,s){ return (n<<s)|(n>>>(32-s)); }
+  function hex(n){ let s=""; for(let i=7;i>=0;i--) s+=((n>>>(i*4))&0xf).toString(16); return s; }
+  const utf8 = unescape(encodeURIComponent(str)), bytes=[];
+  for(let i=0;i<utf8.length;i++) bytes.push(utf8.charCodeAt(i));
+  const ml=bytes.length*8; bytes.push(0x80);
+  while(bytes.length%64!==56) bytes.push(0);
+  for(let i=7;i>=0;i--) bytes.push(Math.floor(ml/Math.pow(2,i*8))&0xff);
+  let h0=0x67452301,h1=0xEFCDAB89,h2=0x98BADCFE,h3=0x10325476,h4=0xC3D2E1F0;
+  for(let j=0;j<bytes.length;j+=64){
+    const w=new Array(80);
+    for(let i=0;i<16;i++) w[i]=(bytes[j+i*4]<<24)|(bytes[j+i*4+1]<<16)|(bytes[j+i*4+2]<<8)|(bytes[j+i*4+3]);
+    for(let i=16;i<80;i++) w[i]=rotl(w[i-3]^w[i-8]^w[i-14]^w[i-16],1);
+    let a=h0,b=h1,c=h2,d=h3,e=h4;
+    for(let i=0;i<80;i++){
+      let f,k;
+      if(i<20){ f=(b&c)|((~b)&d); k=0x5A827999; }
+      else if(i<40){ f=b^c^d; k=0x6ED9EBA1; }
+      else if(i<60){ f=(b&c)|(b&d)|(c&d); k=0x8F1BBCDC; }
+      else { f=b^c^d; k=0xCA62C1D6; }
+      const t=(rotl(a,5)+f+e+k+w[i])|0;
+      e=d; d=c; c=rotl(b,30); b=a; a=t;
+    }
+    h0=(h0+a)|0; h1=(h1+b)|0; h2=(h2+c)|0; h3=(h3+d)|0; h4=(h4+e)|0;
+  }
+  return hex(h0)+hex(h1)+hex(h2)+hex(h3)+hex(h4);
+}
+const signatureFor = (cols) => sha1(cols.map(norm).sort().join("|")).slice(0,12);
+const round2 = (v) => Math.round(v*100)/100;
+const STORE_PREFIX = "risk_map:";
+
+function loadSaved(sig){
+  try { const raw = localStorage.getItem(STORE_PREFIX+sig); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function saveMapping(schema){
+  try { localStorage.setItem(STORE_PREFIX+schema.signature, JSON.stringify(schema)); return true; }
+  catch(e){ return false; }
+}
+function clearSaved(){
+  try { Object.keys(localStorage).filter(k=>k.startsWith(STORE_PREFIX)).forEach(k=>localStorage.removeItem(k)); }
+  catch(e){}
+}
+
+function schemaFor(fi){
+  const s = state[fi];
+  return {
+    signature: signatureFor(FILES[fi].columns),
+    grain: s.grain, approved: true,
+    columns: s.maps.map(m => ({
+      column: m.col,
+      field: m.field || null,
+      confidence: m.field ? (m.manual ? 1.0 : round2(m.conf)) : 0,
+      reason_he: m.manual ? "אושר ידנית ע\"י אנליסט"
+               : m.field ? "זוהה אוטומטית לפי שם העמודה" : "לא זוהתה התאמה",
+      source: m.manual ? "manual" : "heuristic",
+    })),
+  };
+}
+// build a mappings.yaml identical to MappingBook's format (string scalars as JSON = valid YAML)
+function buildMappingsYaml(){
+  const L = [];
+  FILES.forEach((f, fi) => {
+    const sc = schemaFor(fi);
+    L.push(JSON.stringify(sc.signature) + ":");
+    L.push("  signature: " + JSON.stringify(sc.signature));
+    L.push("  grain: " + JSON.stringify(sc.grain));
+    L.push("  approved: true");
+    L.push("  columns:");
+    sc.columns.forEach(c => {
+      L.push("    - column: " + JSON.stringify(c.column));
+      L.push("      field: " + (c.field === null ? "null" : JSON.stringify(c.field)));
+      L.push("      confidence: " + c.confidence);
+      L.push("      reason_he: " + JSON.stringify(c.reason_he));
+      L.push("      source: " + JSON.stringify(c.source));
+    });
+  });
+  return L.join("\n") + "\n";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // "האקסלים" של החברה — שמות עמודות שונים לגמרי בכל קובץ (mirror data/messy_demo)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,7 +270,8 @@ const FILES = [
 ];
 
 const THRESHOLD = 0.8;
-const state = [];   // per file: { grain, key, maps:[{col, field, conf}] }
+const state = [];   // per file: { grain, maps:[{col, field, conf, manual}], loaded }
+let loadedAny = false;
 
 // grain: transaction if the key column repeats
 function detectGrain(file, keyIdx){
@@ -199,25 +283,47 @@ function detectGrain(file, keyIdx){
 
 function buildState(){
   state.length = 0;
+  loadedAny = false;
   for (const file of FILES){
-    const maps = file.columns.map(col => ({ col, ...mapColumn(col) }));
-    let keyIdx = -1;
-    for (const want of KEY_FIELDS){ const i = maps.findIndex(m => m.field === want); if (i>=0){ keyIdx=i; break; } }
-    state.push({ grain: detectGrain(file, keyIdx), maps });
+    const saved = loadSaved(signatureFor(file.columns));
+    if (saved && saved.approved){
+      loadedAny = true;
+      const byCol = Object.fromEntries(saved.columns.map(c => [c.column, c]));
+      const maps = file.columns.map(col => {
+        const c = byCol[col];
+        if (!c) return { col, ...mapColumn(col) };   // a new column the saved map didn't cover
+        return { col, field: c.field || null,
+                 conf: Number(c.confidence) || (c.field ? 1 : 0),
+                 manual: (c.source === "manual" || c.source === "ai") };
+      });
+      state.push({ grain: saved.grain, maps, loaded: true });
+    } else {
+      const maps = file.columns.map(col => ({ col, ...mapColumn(col) }));
+      let keyIdx = -1;
+      for (const want of KEY_FIELDS){ const i = maps.findIndex(m => m.field === want); if (i>=0){ keyIdx=i; break; } }
+      state.push({ grain: detectGrain(file, keyIdx), maps, loaded: false });
+    }
   }
 }
+
+function isFlagged(m){ return !m.manual && (!m.field || m.conf < THRESHOLD); }
 
 function renderReview(){
   const root = document.getElementById("review");
   let flagged = 0;
-  state.forEach(s => s.maps.forEach(m => { if (!m.field || m.conf < THRESHOLD) flagged++; }));
+  state.forEach(s => s.maps.forEach(m => { if (isFlagged(m)) flagged++; }));
   root.innerHTML = "";
 
   const banner = document.createElement("div");
-  banner.className = "banner " + (flagged ? "warn" : "ok");
-  banner.innerHTML = flagged
-    ? `⚠ <b>${flagged}</b> עמודות דורשות את אישורך (סומנו באדום). אשר, תקן, או השאר "התעלם".`
-    : "✓ כל העמודות זוהו ברמת ביטחון גבוהה.";
+  if (loadedAny && !flagged){
+    banner.className = "banner ok";
+    banner.innerHTML = "💾 נטען <b>ממיפוי מאושר שמור</b> — המערכת לא ניחשה מחדש. אפשר לנקד ישירות.";
+  } else {
+    banner.className = "banner " + (flagged ? "warn" : "ok");
+    banner.innerHTML = flagged
+      ? `⚠ <b>${flagged}</b> עמודות דורשות את אישורך (סומנו באדום). אשר, תקן, או השאר "התעלם".`
+      : "✓ כל העמודות זוהו ברמת ביטחון גבוהה — אשר כדי לשמור לשימוש חוזר.";
+  }
   root.appendChild(banner);
 
   FILES.forEach((file, fi) => {
@@ -226,14 +332,15 @@ function renderReview(){
     const gr = s.grain === "transaction"
       ? `<span class="grain txn">טבלת תנועה → צבירה</span>`
       : `<span class="grain cust">רמת-לקוח</span>`;
-    card.innerHTML = `<div class="file-title">📄 ${file.name} ${gr}</div>
+    const saved = s.loaded ? `<span class="grain cust" style="background:#ecfdf5;color:#065f46">💾 ממיפוי שמור</span>` : "";
+    card.innerHTML = `<div class="file-title">📄 ${file.name} ${gr} ${saved}</div>
       <div class="file-sub">${file.rows.length} שורות · ${file.columns.length} עמודות</div>`;
     const tbl = document.createElement("table");
     tbl.innerHTML = `<thead><tr><th>עמודה בקובץ</th><th>דוגמאות</th><th>שדה ניקוד (זיהוי המערכת)</th>
       <th>ביטחון</th><th>סטטוס</th></tr></thead>`;
     const tb = document.createElement("tbody");
     s.maps.forEach((m, ci) => {
-      const flag = (!m.field || m.conf < THRESHOLD);
+      const flag = isFlagged(m);
       const tr = document.createElement("tr"); if (flag) tr.className = "flag";
       const samples = file.rows.slice(0,3).map(r => r[ci]).filter(x=>x!=="").join(" · ");
       const sel = document.createElement("select");
@@ -252,7 +359,8 @@ function renderReview(){
         <span class="conf-num">${Math.round(m.conf*100)}%</span></div>`;
       tr.appendChild(c);
       const st = document.createElement("td");
-      st.innerHTML = m.manual ? `<span class="status ok">✓ אושר ידנית</span>`
+      st.innerHTML = (m.manual && !m.field) ? `<span class="status ok">✓ אושר (מתעלם)</span>`
+        : m.manual ? `<span class="status ok">✓ אושר ידנית</span>`
         : flag ? `<span class="status rev">? לאישור</span>`
         : `<span class="status ok">✓ זוהה</span>`;
       tr.appendChild(st);
@@ -393,9 +501,34 @@ function score(rec, amount){
 const FMT = { national_id:"ת\"ז", monthly_income:"הכנסה", avg_balance:"יתרה", external_bureau_score:"דירוג", credit_utilization:"ניצול", defaults:"כשלים", restricted_account:"מוגבל" };
 function fmtVal(v){ return typeof v==="number" ? (Number.isInteger(v)?v.toLocaleString("he-IL"):v.toFixed(2)) : v; }
 
+let LAST_YAML = "";
+
 document.getElementById("apply").addEventListener("click", () => {
-  const { records, sources } = buildRecords();
+  // "approve" = confirm the mapping as shown; uncertain-and-untouched columns are
+  // held out (marked confirmed-ignore) so a guess never reaches a score.
+  state.forEach(s => s.maps.forEach(m => {
+    if (m.field && m.conf < THRESHOLD && !m.manual){ m.field = null; m.conf = 0; m.manual = true; }
+  }));
+
+  // persist an approved mapping per table (the browser's MappingBook)
+  let savedCount = 0;
+  FILES.forEach((f, fi) => { if (saveMapping(schemaFor(fi))) savedCount++; });
+  LAST_YAML = buildMappingsYaml();
+  document.getElementById("download").style.display = "inline-block";
+  renderReview();   // re-render: nothing red anymore, saved badges appear
+
+  const { records } = buildRecords();
   const root = document.getElementById("results");
+  root.innerHTML = "";
+
+  const ok = document.createElement("div");
+  ok.className = "banner ok";
+  ok.innerHTML = savedCount
+    ? `💾 המיפוי נשמר (${savedCount} טבלאות) — ייטען אוטומטית בכניסה הבאה, בלי לנחש מחדש. `
+      + `אפשר גם להוריד <b>mappings.yaml</b> ולטעון ב-Python עם <code>--mapping</code>.`
+    : "⚠ לא ניתן לשמור בדפדפן (localStorage חסום) — אפשר להוריד את mappings.yaml במקום.";
+  root.appendChild(ok);
+
   const card = document.createElement("div"); card.className = "card results";
   card.innerHTML = `<div class="file-title">✓ תוצאה: רשומה קנונית אחת לכל ת"ז → ציון</div>
     <div class="file-sub">${Object.keys(records).length} לקוחות, אוחדו מכל הקבצים (ת"ז זוהתה למרות 4 איותים שונים; טבלת הבנק נצברה).</div>`;
@@ -415,8 +548,27 @@ document.getElementById("apply").addEventListener("click", () => {
     tb.appendChild(tr);
   });
   tbl.appendChild(tb); card.appendChild(tbl);
-  root.innerHTML = ""; root.appendChild(card);
-  card.scrollIntoView({ behavior:"smooth", block:"start" });
+  root.appendChild(card);
+  ok.scrollIntoView({ behavior:"smooth", block:"start" });
+});
+
+// download the approved mappings.yaml (works on the hosted https page)
+document.getElementById("download").addEventListener("click", () => {
+  const yaml = LAST_YAML || buildMappingsYaml();
+  const blob = new Blob([yaml], { type:"text/yaml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "mappings.yaml"; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// reset the saved mappings (demo convenience)
+document.getElementById("reset").addEventListener("click", (e) => {
+  e.preventDefault();
+  clearSaved();
+  document.getElementById("download").style.display = "none";
+  document.getElementById("results").innerHTML = "";
+  buildState(); renderReview();
 });
 
 // init
