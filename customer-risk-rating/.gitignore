@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# virtualenvs
+.venv/
+venv/
+env/
+
+# secrets / local env
+.env
+.env.*
+
+# consent / audit ledger (may contain personal data — never commit)
+*.consent.jsonl
+data/consent_ledger.jsonl
+consent_ledger.jsonl
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

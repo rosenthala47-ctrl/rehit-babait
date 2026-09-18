@@ -1,0 +1,335 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# מודל דירוג סיכון לקוח  ·  Customer Risk-Rating model
+# ─────────────────────────────────────────────────────────────────────────────
+# זהו הקובץ שאנליסט/חתם האשראי עורך — ללא נגיעה בקוד.
+# כאן קובעים: אילו קריטריונים נכללים, כמה אחוז (weight) כל אחד משפיע (סה"כ = 1.0),
+# ואיך כל ערך גולמי הופך ל"תת-ציון סיכון" 1–10 (נמוך = טוב), וספי ההחלטה.
+#
+# המבנה מסודר לפי חמשת ה-C's של אשראי (5 C's of credit), עם משקלי המשנה בבלוק
+# ה-Character בהשראת פרופורציות FICO / VantageScore. ראו README למקורות.
+#   Character   — היסטוריית והתנהגות אשראי  (~40%)
+#   Capacity    — יכולת החזר (הכנסה, חוב, DTI, תעסוקה)  (~35%)
+#   Capital     — הון/כרית ביטחון (חיסכון, התנהלות בנקאית)  (~8%)
+#   Collateral  — בטוחות  (~7%)
+#   Conditions  — מטרת ההלוואה + פרופיל  (~10%)
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: 2
+
+scale:
+  min: 1
+  max: 10
+
+assumptions:
+  currency: "ILS"
+  default_term_months: 60   # מח"מ משוער לחישוב התשלום החודשי של ההלוואה (עבור DTI)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# כללי נוק-אאוט (Knockout rules) — תנאי דחייה מוחלטים, בלתי-תלויים בציון
+# ─────────────────────────────────────────────────────────────────────────────
+# אם מתקיים אפילו תנאי אחד — הבקשה נדחית אוטומטית ("נדחה עקב כלל נוק-אאוט"),
+# ללא תלות בציון המשוקלל, ושכבת שיקול הדעת (AI) אינה רשאית לבטל זאת.
+# הכלל מופעל רק כאשר הנתון קיים בפועל (חוסר נתון אינו מפעיל נוק-אאוט).
+#   gte: מופעל כאשר הערך >= הסף   ·   lte: כאשר הערך <= הסף
+#   equals: כאשר הערך (טקסט) נמצא ברשימה
+knockout_rules:
+  - id: active_default
+    label_he: "כשל אשראי / הליך הוצל\"פ פעיל"
+    label_en: "Active credit default / enforcement"
+    field: defaults
+    gte: 1
+  - id: restricted_account
+    label_he: "חשבון מוגבל (בנק ישראל)"
+    label_en: "Restricted bank account"
+    field: restricted_account
+    gte: 1
+  - id: bankruptcy
+    label_he: "פשיטת רגל / כונס נכסים / הקפאת הליכים"
+    label_en: "Bankruptcy / receivership"
+    field: bankruptcy
+    gte: 1
+
+decision_bands:
+  - id: approve
+    min: 1
+    max: 3
+    label_he: "אישור"
+    label_en: "Approve"
+    action_he: "אישור ההלוואה בתנאים הרגילים."
+  - id: review
+    min: 4
+    max: 6
+    label_he: "בדיקה ידנית / אישור חלקי"
+    label_en: "Manual review"
+    action_he: "העברה לחתם אנושי; לשקול סכום מופחת, ערב או בטוחה."
+  - id: reject
+    min: 7
+    max: 10
+    label_he: "דחייה"
+    label_en: "Reject"
+    action_he: "דחיית הבקשה — רמת סיכון גבוהה מדי."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# type: categorical    → מיפוי ערך טקסטואלי לתת-ציון ("mapping").
+# type: numeric_bands  → הרצועה הראשונה שבה ערך <= max (מסודרות מהקטן לגדול; אחרונה .inf).
+# source: שם שדה בנתונים, או "derived:<שם>" לערך מחושב (features.py).
+# ─────────────────────────────────────────────────────────────────────────────
+criteria:
+
+  # ═══ CHARACTER — היסטוריית והתנהגות אשראי (~40%) ═══════════════════════════
+  - id: bureau_score
+    label_he: "דירוג אשראי (לשכת נתוני אשראי / בנק ישראל)"
+    label_en: "External credit score (Bank of Israel register)"
+    weight: 0.10
+    source: external_bureau_score
+    type: numeric_bands            # סקאלה ~300–850; גבוה = סיכון נמוך
+    bands:
+      - {max: 500,  risk: 10}
+      - {max: 580,  risk: 8}
+      - {max: 640,  risk: 6}
+      - {max: 700,  risk: 4}
+      - {max: 760,  risk: 2}
+      - {max: .inf, risk: 1}
+    missing_risk: 7
+
+  - id: payment_history
+    label_he: "היסטוריית תשלומים (פיגורים ב-12 החודשים האחרונים)"
+    label_en: "Payment history (missed payments, 12m)"
+    weight: 0.10
+    source: missed_payments_12m
+    type: numeric_bands
+    bands:
+      - {max: 0,   risk: 1}
+      - {max: 1,   risk: 3}
+      - {max: 2,   risk: 5}
+      - {max: 3,   risk: 7}
+      - {max: .inf, risk: 9}
+    missing_risk: 6
+
+  - id: defaults
+    label_he: "כשלי אשראי / הוצל\"פ / כונס / חשבון מוגבל"
+    label_en: "Defaults / collections / enforcement"
+    weight: 0.07
+    source: defaults
+    type: numeric_bands
+    bands:
+      - {max: 0,   risk: 1}
+      - {max: 1,   risk: 6}
+      - {max: .inf, risk: 10}
+    missing_risk: 5
+
+  - id: credit_utilization
+    label_he: "ניצול מסגרות אשראי"
+    label_en: "Credit utilization"
+    weight: 0.06
+    source: credit_utilization
+    type: numeric_bands
+    bands:
+      - {max: 0.30, risk: 1}
+      - {max: 0.50, risk: 3}
+      - {max: 0.70, risk: 5}
+      - {max: 0.90, risk: 8}
+      - {max: .inf, risk: 10}
+    missing_risk: 5
+
+  - id: credit_history_length
+    label_he: "אורך היסטוריית האשראי (שנים מהחשבון הוותיק)"
+    label_en: "Length of credit history (years)"
+    weight: 0.04
+    source: oldest_account_years
+    type: numeric_bands            # ותק ארוך = סיכון נמוך
+    bands:
+      - {max: 1,    risk: 8}
+      - {max: 3,    risk: 6}
+      - {max: 7,    risk: 4}
+      - {max: 15,   risk: 2}
+      - {max: .inf, risk: 1}
+    missing_risk: 5
+
+  - id: recent_inquiries
+    label_he: "בקשות אשראי אחרונות (6 ח') — \"רעב לאשראי\""
+    label_en: "Recent hard inquiries (6m)"
+    weight: 0.03
+    source: hard_inquiries_6m
+    type: numeric_bands
+    bands:
+      - {max: 0,    risk: 1}
+      - {max: 1,    risk: 2}
+      - {max: 2,    risk: 4}
+      - {max: 4,    risk: 6}
+      - {max: 6,    risk: 8}
+      - {max: .inf, risk: 10}
+    missing_risk: 4
+
+  # ═══ CAPACITY — יכולת החזר (~35%) ══════════════════════════════════════════
+  - id: affordability
+    label_he: "יכולת החזר (DTI) כולל ההלוואה המבוקשת"
+    label_en: "Debt-to-income incl. requested loan"
+    weight: 0.15
+    source: "derived:dti"
+    type: numeric_bands
+    bands:
+      - {max: 0.20, risk: 1}
+      - {max: 0.30, risk: 3}
+      - {max: 0.40, risk: 5}
+      - {max: 0.50, risk: 7}
+      - {max: 0.70, risk: 9}
+      - {max: .inf, risk: 10}
+    missing_risk: 8
+
+  - id: income_level
+    label_he: "רמת הכנסה חודשית (נטו)"
+    label_en: "Monthly net income"
+    weight: 0.07
+    source: monthly_income
+    type: numeric_bands
+    bands:
+      - {max: 5000,  risk: 10}
+      - {max: 7000,  risk: 8}
+      - {max: 10000, risk: 6}
+      - {max: 15000, risk: 4}
+      - {max: 20000, risk: 3}
+      - {max: 30000, risk: 2}
+      - {max: .inf,  risk: 1}
+    missing_risk: 8
+
+  - id: existing_leverage
+    label_he: "מינוף קיים (סך חוב ביחס להכנסה שנתית)"
+    label_en: "Existing leverage (total debt / annual income)"
+    weight: 0.06
+    source: "derived:existing_leverage"
+    type: numeric_bands
+    bands:
+      - {max: 0.5, risk: 1}
+      - {max: 1.0, risk: 3}
+      - {max: 2.0, risk: 5}
+      - {max: 3.0, risk: 7}
+      - {max: 5.0, risk: 9}
+      - {max: .inf, risk: 10}
+    missing_risk: 6
+
+  - id: employment_status
+    label_he: "מצב תעסוקתי"
+    label_en: "Employment status"
+    weight: 0.05
+    source: employment_status
+    type: categorical
+    mapping:
+      employed_permanent: 1
+      civil_servant: 1
+      self_employed: 4
+      employed_temp: 5
+      pensioner: 4
+      student: 6
+      unemployed: 10
+    unknown_risk: 7
+    missing_risk: 8
+
+  - id: employment_tenure
+    label_he: "ותק במקום העבודה (חודשים)"
+    label_en: "Job tenure (months)"
+    weight: 0.02
+    source: tenure_months
+    type: numeric_bands
+    bands:
+      - {max: 6,    risk: 9}
+      - {max: 12,   risk: 7}
+      - {max: 24,   risk: 5}
+      - {max: 36,   risk: 3}
+      - {max: 60,   risk: 2}
+      - {max: .inf, risk: 1}
+    missing_risk: 6
+
+  # ═══ CAPITAL — הון / כרית ביטחון (~8%) ═════════════════════════════════════
+  - id: liquidity_savings
+    label_he: "נזילות / חיסכון (יתרה ממוצעת בעו\"ש)"
+    label_en: "Liquidity / savings (avg. balance)"
+    weight: 0.04
+    source: avg_balance
+    type: numeric_bands            # יתרה גבוהה = סיכון נמוך; יתרה שלילית = גבוה
+    bands:
+      - {max: 0,     risk: 10}
+      - {max: 2000,  risk: 8}
+      - {max: 10000, risk: 5}
+      - {max: 25000, risk: 3}
+      - {max: 50000, risk: 2}
+      - {max: .inf,  risk: 1}
+    missing_risk: 6
+
+  - id: banking_conduct
+    label_he: "התנהלות בנקאית (ימי חריגה ממסגרת ב-12 ח')"
+    label_en: "Banking conduct (overdraft days)"
+    weight: 0.04
+    source: overdraft_days_12m
+    type: numeric_bands
+    bands:
+      - {max: 0,    risk: 1}
+      - {max: 15,   risk: 3}
+      - {max: 45,   risk: 5}
+      - {max: 90,   risk: 8}
+      - {max: .inf, risk: 10}
+    missing_risk: 5
+
+  # ═══ COLLATERAL — בטוחות (~7%) ═════════════════════════════════════════════
+  - id: collateral
+    label_he: "בטוחה / ביטחונות להלוואה"
+    label_en: "Collateral / security"
+    weight: 0.07
+    source: collateral
+    type: categorical
+    mapping:
+      full_secured: 1        # מובטח מלא (נכס/רכב בשווי ההלוואה)
+      partial_secured: 4     # מובטח חלקית
+      guarantor: 5           # ערב בלבד
+      unsecured: 7           # ללא בטוחה
+    unknown_risk: 6
+    missing_risk: 6
+
+  # ═══ CONDITIONS & PROFILE — מטרה ופרופיל (~10%) ════════════════════════════
+  - id: loan_purpose
+    label_he: "מטרת ההלוואה"
+    label_en: "Loan purpose"
+    weight: 0.05
+    source: loan_purpose
+    type: categorical
+    mapping:
+      debt_consolidation: 3    # איחוד הלוואות
+      home_renovation: 3       # שיפוץ
+      vehicle: 3               # רכב
+      education: 4             # השכלה
+      medical: 4               # רפואי
+      business: 5              # עסק / הון חוזר
+      life_event: 5            # אירוע (חתונה וכו')
+      consumption: 6           # צריכה שוטפת / נסיעה
+      investment: 9            # השקעה ספקולטיבית (מינוף להשקעה)
+      other: 5
+    unknown_risk: 5
+    missing_risk: 4
+
+  - id: age
+    label_he: "גיל"
+    label_en: "Age"
+    weight: 0.02
+    source: age
+    type: numeric_bands
+    bands:
+      - {max: 20,   risk: 6}
+      - {max: 24,   risk: 4}
+      - {max: 60,   risk: 1}
+      - {max: 70,   risk: 4}
+      - {max: .inf, risk: 7}
+    missing_risk: 5
+
+  - id: family_stability
+    label_he: "יציבות משפחתית (מצב משפחתי)"
+    label_en: "Family stability (marital status)"
+    weight: 0.03
+    source: marital_status
+    type: categorical
+    mapping:
+      married: 1
+      widowed: 3
+      single: 4
+      divorced: 5
+    unknown_risk: 4
+    missing_risk: 4

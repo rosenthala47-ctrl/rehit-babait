@@ -1,0 +1,187 @@
+"""בדיקות למנוע הניקוד ולמודל הניקוד."""
+import pathlib
+
+import pytest
+
+from risk_rating.config import Band, Criterion, DecisionBand, ScoringModel
+from risk_rating.engine import RiskEngine, round_half_up
+from risk_rating.service import DEFAULT_CONFIG, DEFAULT_DATA_DIR, RiskRatingService
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(scope="module")
+def service():
+    return RiskRatingService(data_dir=DEFAULT_DATA_DIR, config_path=DEFAULT_CONFIG)
+
+
+# ── end-to-end anchors on the sample data ────────────────────────────────────
+def test_yossi_is_low_risk_approve(service):
+    result = service.assess("C1001", 100000)   # by id: two customers are named יוסי כהן
+    assert result.customer_id == "C1001"
+    assert result.score == pytest.approx(2.11, abs=0.01)
+    assert result.score_rounded == 2
+    assert result.decision_id == "approve"
+
+
+def test_unemployed_high_risk_reject(service):
+    result = service.assess("דוד", 100000)
+    assert result.customer_id == "C1003"
+    assert result.score == pytest.approx(7.73, abs=0.01)
+    assert result.score_rounded == 8
+    assert result.decision_id == "reject"
+
+
+def test_loan_purpose_and_collateral_affect_score(service):
+    """Request-level Conditions/Collateral inputs move the score."""
+    base = service.assess("C1001", 100000, purpose="debt_consolidation",
+                          collateral="full_secured").score
+    # speculative purpose + no collateral is riskier than consolidation + secured
+    riskier = service.assess("C1001", 100000, purpose="investment",
+                             collateral="unsecured").score
+    assert riskier > base
+
+    crit = next(c for c in service.assess("C1001", 100000, purpose="investment")
+                .breakdown if c.id == "loan_purpose")
+    assert crit.risk == 9  # investment -> high risk per the model
+
+
+def test_borderline_goes_to_review(service):
+    result = service.assess("שרה", 50000)
+    assert result.decision_id == "review"
+    assert 4 <= result.score_rounded <= 6
+
+
+def test_larger_loan_raises_risk(service):
+    """A bigger requested amount can only push DTI (and the score) up."""
+    small = service.assess("C1001", 50000).score
+    big = service.assess("C1001", 900000).score
+    assert big > small
+
+
+def test_missing_table_data_uses_missing_risk(service):
+    # Noa (C1006) has no row in banking.csv.
+    result = service.assess("נועה", 40000)
+    banking = next(c for c in result.breakdown if c.id == "banking_conduct")
+    assert banking.missing is True
+    assert banking.raw_value is None
+    assert banking.risk == 5.0  # missing_risk from the model
+
+
+def test_score_dict_is_json_serializable(service):
+    import json
+    result = service.assess("C1001", 100000)
+    json.dumps(result.to_dict())  # must not raise
+
+
+# ── unit tests on the scoring primitives ─────────────────────────────────────
+def test_model_has_expanded_criteria(service):
+    """The model covers the 5 Cs — credit, capacity, capital, collateral, conditions."""
+    result = service.assess("C1001", 100000)
+    ids = {c.id for c in result.breakdown}
+    assert {"bureau_score", "credit_history_length", "recent_inquiries",
+            "existing_leverage", "liquidity_savings", "collateral",
+            "loan_purpose"} <= ids
+    assert len(result.breakdown) == 17
+
+
+def test_data_lineage_routes_each_field_to_its_source(service):
+    """The system pulls each field from the right database (Yosef, by ת\"ז)."""
+    lin = service.data_lineage("358024917", 100000)
+    by_field = {r["field"]: r["source"] for r in lin["lineage"]}
+    assert by_field["external_bureau_score"] == "מרשם נתוני אשראי (בנק ישראל)"
+    assert by_field["credit_utilization"] == "מרשם נתוני אשראי (בנק ישראל)"
+    assert by_field["monthly_income"] == "טבלת תעסוקה"
+    assert by_field["overdraft_days_12m"] == "טבלת עו\"ש / בנק"
+    assert by_field["age"] == "טבלת דמוגרפיה"
+    assert by_field["derived:dti"] == "מחושב מנתונים שנשלפו"
+
+
+def test_existing_leverage_feature():
+    from risk_rating.features import get_feature
+    fn = get_feature("existing_leverage")
+    # total_debt 120000 / (income 4000 * 12) = 2.5
+    assert fn({"monthly_income": 4000, "total_debt": 120000}, {}) == pytest.approx(2.5)
+    assert fn({"monthly_income": 4000}, {}) is None       # unknown debt
+    assert fn({"total_debt": 50000}, {}) is None          # unknown income
+
+
+@pytest.mark.parametrize("x,expected", [
+    (2.4, 2), (2.5, 3), (3.5, 4), (6.4, 6), (6.5, 7), (1.0, 1), (9.99, 10),
+])
+def test_round_half_up(x, expected):
+    assert round_half_up(x) == expected
+
+
+def _tiny_model():
+    """A minimal 2-criterion model for isolated engine tests."""
+    return ScoringModel(
+        version=1, scale_min=1, scale_max=10,
+        assumptions={"default_term_months": 60},
+        decision_bands=[
+            DecisionBand("approve", 1, 3, "אישור"),
+            DecisionBand("review", 4, 6, "בדיקה"),
+            DecisionBand("reject", 7, 10, "דחייה"),
+        ],
+        criteria=[
+            Criterion(id="status", label_he="סטטוס", weight=0.5, source="status",
+                      type="categorical",
+                      mapping={"good": 1, "bad": 10}, unknown_risk=5, missing_risk=8),
+            Criterion(id="num", label_he="מספר", weight=0.5, source="num",
+                      type="numeric_bands",
+                      bands=[Band(10, 1), Band(20, 5), Band(float("inf"), 10)],
+                      missing_risk=7),
+        ],
+    )
+
+
+def test_numeric_band_selection_is_first_match():
+    engine = RiskEngine(_tiny_model())
+    # num=5 -> first band (<=10) risk 1 ; status good -> risk 1 ; total 1.0
+    assert engine.score({"status": "good", "num": 5}, 0).score == pytest.approx(1.0)
+    # num=15 -> risk 5 ; status bad -> risk 10 ; total 0.5*5 + 0.5*10 = 7.5
+    r = engine.score({"status": "bad", "num": 15}, 0)
+    assert r.score == pytest.approx(7.5)
+    assert r.decision_id == "reject"
+
+
+def test_missing_and_unknown_values():
+    engine = RiskEngine(_tiny_model())
+    # status missing -> missing_risk 8 ; num missing -> missing_risk 7 ; total 7.5
+    r = engine.score({}, 0)
+    assert r.score == pytest.approx(7.5)
+    status = next(c for c in r.breakdown if c.id == "status")
+    assert status.missing is True
+    # unknown categorical value -> unknown_risk 5
+    r2 = engine.score({"status": "weird", "num": 5}, 0)
+    status2 = next(c for c in r2.breakdown if c.id == "status")
+    assert status2.risk == 5
+    assert status2.missing is False
+
+
+def test_band_for_boundaries():
+    model = _tiny_model()
+    assert model.band_for(1).id == "approve"
+    assert model.band_for(3).id == "approve"
+    assert model.band_for(4).id == "review"
+    assert model.band_for(6).id == "review"
+    assert model.band_for(7).id == "reject"
+    assert model.band_for(10).id == "reject"
+
+
+# ── model validation ─────────────────────────────────────────────────────────
+def test_default_model_weights_sum_to_one():
+    model = ScoringModel.load(DEFAULT_CONFIG)
+    assert sum(c.weight for c in model.criteria) == pytest.approx(1.0)
+    assert model.validate() == []  # no warnings
+
+
+def test_bad_weights_raise():
+    with pytest.raises(ValueError):
+        ScoringModel.from_dict({
+            "criteria": [
+                {"id": "a", "weight": 0.3, "source": "a", "type": "categorical",
+                 "mapping": {"x": 1}},
+            ],
+            "decision_bands": [{"id": "approve", "min": 1, "max": 10}],
+        })
