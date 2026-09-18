@@ -150,6 +150,21 @@ PYTHONPATH=src python -m risk_rating.ingest --data <תיקייה> --mapping maps
 
 הדגמה מלאה יושבת ב-`data/messy_demo/` (4 קבצים, שמות עמודות שונים, טבלת תנועה לצבירה).
 
+**שרת קליטה עם ה-AI המלא (העלאת קבצים אמיתיים):**
+```bash
+pip install -r requirements.txt            # כולל fastapi + python-multipart
+export ANTHROPIC_API_KEY=sk-ant-...        # להפעלת זיהוי העמודות ע"י Claude
+PYTHONPATH=src uvicorn risk_rating.api:app  # → http://127.0.0.1:8000/ingest
+```
+בכתובת **`/ingest`**: גוררים אקסלים אמיתיים → השרת מריץ את **Claude** לזיהוי העמודות →
+מסך אישור (מה שבספק באדום) → **"אשר"** שומר את המיפוי (`MappingBook`) ומחזיר ציון לכל לקוח.
+ללא מפתח/חבילת `anthropic` השרת נופל אוטומטית למנוע הכינויים הדטרמיניסטי (ומסמן זאת בבירור).
+נקודות הקצה: `POST /api/ingest/propose` (העלאה → מיפוי מוצע), `POST /api/ingest/apply`
+(אישור → שמירה + ניקוד), `GET /api/ingest/fields` (רשימת השדות הקנוניים).
+
+> **הבחנה חשובה:** דף ההדגמה הציבורי (`credit-demo/ingest.html`) הוא client-side לשיתוף —
+> המיפוי בו דטרמיניסטי. השרת (`/ingest`) הוא הגרסה האמיתית שמריצה את ה-AI ומעלה קבצים אמיתיים.
+
 ---
 
 ## מודל הניקוד — 17 קריטריונים לפי חמשת ה-C's

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>קליטת נתונים (שרת + AI) — דירוג סיכון לקוח</title>
+<style>
+  :root {
+    --bg:#f1f5f9; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --brand:#1d4ed8; --brand-ink:#1e3a8a; --approve:#16a34a; --review:#d97706; --reject:#dc2626;
+    --shadow:0 10px 30px rgba(15,23,42,.08);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",Arial,"Noto Sans Hebrew",sans-serif; line-height:1.5; }
+  .wrap { max-width:980px; margin:0 auto; padding:24px 16px 60px; }
+  header h1 { margin:0 0 4px; font-size:1.7rem; }
+  header p { margin:0 0 8px; color:var(--muted); }
+  .tag { display:inline-block; font-size:.72rem; background:#e0e7ff; color:#3730a3;
+    padding:3px 10px; border-radius:999px; margin-bottom:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:var(--shadow); padding:20px; margin-bottom:20px; }
+  .drop { border:2px dashed var(--line); border-radius:14px; padding:26px; text-align:center; }
+  .drop.hover { border-color:var(--brand); background:#f8fafff; }
+  input[type=file] { font-family:inherit; }
+  button { padding:12px 20px; font-size:1.02rem; font-weight:600; color:#fff;
+    background:var(--brand); border:0; border-radius:10px; cursor:pointer; }
+  button:hover { background:var(--brand-ink); }
+  button:disabled { background:#94a3b8; cursor:default; }
+  .file-title { display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.05rem; margin-bottom:4px; flex-wrap:wrap; }
+  .grain { font-size:.72rem; padding:2px 9px; border-radius:999px; font-weight:600; }
+  .grain.cust { background:#eff6ff; color:#1e40af; }
+  .grain.txn { background:#fef3c7; color:#92400e; }
+  .grain.ai { background:#f5f3ff; color:#6d28d9; }
+  .grain.saved { background:#ecfdf5; color:#065f46; }
+  .file-sub { color:var(--muted); font-size:.85rem; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; font-size:.8rem; }
+  tr.flag { background:#fef2f2; }
+  .col-name { font-weight:600; }
+  .samples { color:var(--muted); font-size:.78rem; }
+  select { width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:8px;
+    background:#fff; color:var(--ink); font-size:.85rem; font-family:inherit; }
+  tr.flag select { border-color:var(--reject); }
+  .conf { display:flex; align-items:center; gap:6px; min-width:90px; }
+  .conf-bar { flex:1; height:7px; background:#eef2f7; border-radius:999px; overflow:hidden; }
+  .conf-bar > span { display:block; height:100%; border-radius:999px; }
+  .conf-num { font-size:.75rem; color:var(--muted); min-width:34px; }
+  .status { font-size:.8rem; white-space:nowrap; }
+  .status.ok { color:var(--approve); } .status.rev { color:var(--reject); font-weight:600; }
+  .banner { padding:12px 14px; border-radius:12px; font-size:.92rem; margin-bottom:16px; }
+  .banner.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+  .banner.ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+  .banner.ai { background:#f5f3ff; border:1px solid #ddd6fe; color:#5b21b6; }
+  .badge { padding:4px 12px; border-radius:999px; font-weight:700; color:#fff; font-size:.85rem; }
+  .ko { color:var(--reject); font-weight:700; font-size:.82rem; }
+  .muted { color:var(--muted); }
+  .reason { font-size:.72rem; color:var(--muted); }
+  footer { color:var(--muted); font-size:.8rem; text-align:center; margin-top:8px; }
+  @media (max-width:640px){ .samples,.reason{ display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>קליטת נתונים — שרת + AI 🤖</h1>
+    <p>העלה את קבצי האקסל של החברה. השרת מריץ את <b>Claude</b> כדי לזהות מה כל עמודה אומרת,
+       אתה מאשר/מתקן את מה שבספק, והמערכת שומרת את המיפוי ומחזירה ציון אחד לכל לקוח.</p>
+    <span class="tag">שרת FastAPI · המיפוי רץ בצד השרת · המיפוי המאושר נשמר (MappingBook)</span>
+  </header>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <p style="margin:0 0 12px"><b>גררו לכאן קבצים</b> או בחרו — CSV / Excel (.xlsx, .xls), אפשר כמה יחד.</p>
+      <input type="file" id="files" multiple accept=".csv,.xlsx,.xls" />
+      <div style="margin-top:14px"><button id="upload">העלה ומפה עם AI</button></div>
+      <div class="muted" id="hint" style="margin-top:10px; font-size:.82rem">
+        אין לך קבצים? בתיקיית <code>data/messy_demo/</code> יש 4 קבצי הדגמה.</div>
+    </div>
+  </div>
+
+  <div id="status"></div>
+  <div id="review"></div>
+  <div id="applybar" class="card" style="display:none; text-align:center;">
+    <button id="apply">✓ אשר מיפוי, שמור ונקד</button>
+  </div>
+  <div id="results"></div>
+
+  <footer>מנוע דירוג דטרמיניסטי ומבוקר · קליטה חכמה בצד השרת · דירוג סיכון לקוח</footer>
+</div>
+
+<script>
+const API = "/api/ingest";
+const THRESHOLD = 0.8;
+let FIELDS = [];              // canonical field list from the server
+let uploadId = null;
+let tables = [];             // server proposal; we mutate columns[].field/manual
+
+async function loadFields(){
+  try { const r = await fetch(API + "/fields"); FIELDS = (await r.json()).fields; } catch(e){ FIELDS = []; }
+}
+const labelOf = (id) => (FIELDS.find(f => f.id === id) || {}).label_he || id;
+
+function fieldOptions(selected){
+  return `<option value="">— התעלם —</option>` +
+    FIELDS.map(f => `<option value="${f.id}" ${f.id===selected?"selected":""}>${f.label_he}</option>`).join("");
+}
+const isFlagged = (c) => !c.manual && (!c.field || (c.confidence||0) < THRESHOLD);
+
+function renderStatus(data){
+  const el = document.getElementById("status");
+  el.innerHTML = "";
+  const b = document.createElement("div");
+  b.className = "banner " + (data.ai_used ? "ai" : "warn");
+  b.innerHTML = data.ai_used
+    ? `🤖 המיפוי בוצע ע"י <b>Claude</b> על ${data.files} קבצים. בדוק ואשר את מה שסומן.`
+    : `ℹ️ ה-AI לא זמין בשרת זה (חסר <code>anthropic</code> או <code>ANTHROPIC_API_KEY</code>) — מוצג מיפוי היוריסטי. הזיהוי עדיין עובד; להפעלת ה-AI התקן את החבילה והגדר מפתח.`;
+  el.appendChild(b);
+}
+
+function render(){
+  const root = document.getElementById("review");
+  root.innerHTML = "";
+  let flagged = 0;
+  tables.forEach(t => t.columns.forEach(c => { if (isFlagged(c)) flagged++; }));
+  if (flagged){
+    const b = document.createElement("div"); b.className = "banner warn";
+    b.innerHTML = `⚠ <b>${flagged}</b> עמודות דורשות את אישורך (אדום). אשר, תקן, או השאר "התעלם".`;
+    root.appendChild(b);
+  }
+  tables.forEach((t, ti) => {
+    const card = document.createElement("div"); card.className = "card";
+    const gr = t.grain === "transaction" ? `<span class="grain txn">טבלת תנועה → צבירה</span>`
+                                         : `<span class="grain cust">רמת-לקוח</span>`;
+    const ai = t.approved ? `<span class="grain saved">💾 ממיפוי שמור</span>`
+             : t.columns.some(c=>c.source==="ai") ? `<span class="grain ai">🤖 AI</span>` : "";
+    card.innerHTML = `<div class="file-title">📄 ${t.label} ${gr} ${ai}</div>
+      <div class="file-sub">${t.rows} שורות · ${t.columns.length} עמודות</div>`;
+    const tbl = document.createElement("table");
+    tbl.innerHTML = `<thead><tr><th>עמודה בקובץ</th><th>דוגמאות</th><th>שדה ניקוד</th>
+      <th>ביטחון</th><th>סטטוס</th></tr></thead>`;
+    const tb = document.createElement("tbody");
+    t.columns.forEach((c) => {
+      const flag = isFlagged(c);
+      const tr = document.createElement("tr"); if (flag) tr.className = "flag";
+      const sel = document.createElement("select");
+      sel.innerHTML = fieldOptions(c.field);
+      sel.addEventListener("change", () => {
+        c.field = sel.value || null; c.confidence = sel.value ? 1.0 : 0; c.manual = true; render();
+      });
+      const conf = c.confidence || 0;
+      const color = conf>=0.8 ? "var(--approve)" : conf>0 ? "var(--review)" : "var(--reject)";
+      tr.innerHTML = `<td class="col-name">${c.column}</td>
+        <td class="samples">${(c.samples||[]).slice(0,3).join(" · ")||"—"}
+          ${c.reason_he?`<div class="reason">${c.reason_he}</div>`:""}</td>`;
+      const td = document.createElement("td"); td.appendChild(sel); tr.appendChild(td);
+      const cc = document.createElement("td");
+      cc.innerHTML = `<div class="conf"><div class="conf-bar"><span style="width:${Math.round(conf*100)}%;background:${color}"></span></div>
+        <span class="conf-num">${Math.round(conf*100)}%</span></div>`;
+      tr.appendChild(cc);
+      const st = document.createElement("td");
+      st.innerHTML = (c.manual && !c.field) ? `<span class="status ok">✓ אושר (מתעלם)</span>`
+        : c.manual ? `<span class="status ok">✓ אושר ידנית</span>`
+        : flag ? `<span class="status rev">? לאישור</span>`
+        : `<span class="status ok">✓ ${c.source==="ai"?"AI":"זוהה"}</span>`;
+      tr.appendChild(st);
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); card.appendChild(tbl); root.appendChild(card);
+  });
+  document.getElementById("applybar").style.display = tables.length ? "block" : "none";
+}
+
+// ── upload → propose ─────────────────────────────────────────────────────────
+async function propose(fileList){
+  if (!fileList || !fileList.length) return;
+  const btn = document.getElementById("upload");
+  btn.disabled = true; btn.textContent = "מעלה וממפה…";
+  document.getElementById("results").innerHTML = "";
+  try {
+    const fd = new FormData();
+    for (const f of fileList) fd.append("files", f);
+    const res = await fetch(API + "/propose", { method:"POST", body:fd });
+    if (!res.ok){ const e = await res.json().catch(()=>({detail:res.statusText}));
+      throw new Error(e.detail || "שגיאת שרת"); }
+    const data = await res.json();
+    uploadId = data.upload_id; tables = data.tables;
+    // hold untouched sub-threshold as unresolved (flagged) until the analyst acts
+    tables.forEach(t => t.columns.forEach(c => { c.manual = c.manual || (t.approved && !!c.field); }));
+    renderStatus(data); render();
+    document.getElementById("review").scrollIntoView({ behavior:"smooth", block:"start" });
+  } catch(err){
+    document.getElementById("status").innerHTML =
+      `<div class="banner warn">שגיאה: ${err.message}</div>`;
+  } finally { btn.disabled = false; btn.textContent = "העלה ומפה עם AI"; }
+}
+
+// ── approve → apply + score ──────────────────────────────────────────────────
+document.getElementById("apply").addEventListener("click", async () => {
+  // confirm-ignore untouched uncertain columns (never guess into a score)
+  tables.forEach(t => t.columns.forEach(c => {
+    if (c.field && (c.confidence||0) < THRESHOLD && !c.manual){ c.field = null; c.confidence = 0; c.manual = true; }
+  }));
+  render();
+  const approved = {};
+  tables.forEach(t => {
+    approved[t.signature] = { grain: t.grain,
+      columns: t.columns.map(c => ({ column: c.column, field: c.field || null })) };
+  });
+  const btn = document.getElementById("apply"); btn.disabled = true; btn.textContent = "מנקד…";
+  try {
+    const res = await fetch(API + "/apply", { method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ upload_id: uploadId, amount: 100000, approved }) });
+    if (!res.ok){ const e = await res.json().catch(()=>({detail:res.statusText}));
+      throw new Error(typeof e.detail==="string"?e.detail:"שגיאת שרת"); }
+    renderResults(await res.json());
+  } catch(err){
+    document.getElementById("results").innerHTML = `<div class="banner warn">שגיאה: ${err.message}</div>`;
+  } finally { btn.disabled = false; btn.textContent = "✓ אשר מיפוי, שמור ונקד"; }
+});
+
+const COLORS = { approve:"var(--approve)", review:"var(--review)", reject:"var(--reject)" };
+const FMT = { national_id:"ת\"ז", monthly_income:"הכנסה", avg_balance:"יתרה", external_bureau_score:"דירוג", credit_utilization:"ניצול", defaults:"כשלים", restricted_account:"מוגבל" };
+const fmtVal = (v) => typeof v==="number" ? (Number.isInteger(v)?v.toLocaleString("he-IL"):v.toFixed(2)) : v;
+
+function renderResults(data){
+  const root = document.getElementById("results");
+  root.innerHTML = "";
+  const ok = document.createElement("div"); ok.className = "banner ok";
+  ok.innerHTML = `💾 המיפוי נשמר בשרת (ייטען אוטומטית בהעלאה הבאה של אותו מבנה). `
+    + `${data.stats.rows_in} שורות → <b>${data.stats.customers_out}</b> לקוחות קנוניים.`;
+  root.appendChild(ok);
+  if (data.validation && data.validation.length){
+    const w = document.createElement("div"); w.className = "banner warn";
+    w.innerHTML = `⚠ ${data.validation.length} התראות ולידציה: ` + data.validation.slice(0,6).join(" · ");
+    root.appendChild(w);
+  }
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<div class="file-title">✓ ציון אחד לכל ת"ז</div>`;
+  const tbl = document.createElement("table");
+  tbl.innerHTML = `<thead><tr><th>לקוח</th><th>נתונים שמוזגו</th><th>ציון</th><th>החלטה</th></tr></thead>`;
+  const tb = document.createElement("tbody");
+  data.customers.forEach(c => {
+    const pulled = Object.entries(c.pulled).map(([k,v]) => `${FMT[k]||k}: <b>${fmtVal(v)}</b>`).join(" · ");
+    const ko = c.knockouts.length ? `<div class="ko">⛔ נוק-אאוט: ${c.knockouts.join("; ")}</div>` : "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><b>${c.full_name||c.customer_id}</b><br><span class="muted" style="font-size:.78rem">${c.customer_id}</span></td>
+      <td class="samples" style="font-size:.82rem;color:var(--ink)">${pulled}</td>
+      <td><b style="font-size:1.1rem">${c.score.toFixed(1)}</b><span class="muted">/10</span></td>
+      <td><span class="badge" style="background:${COLORS[c.decision]||'#334155'}">${c.decision_label_he}</span>${ko}</td>`;
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb); card.appendChild(tbl); root.appendChild(card);
+  ok.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+// ── wiring ───────────────────────────────────────────────────────────────────
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("files");
+document.getElementById("upload").addEventListener("click", () => propose(fileInput.files));
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("hover"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("hover"); }));
+drop.addEventListener("drop", e => { if (e.dataTransfer.files.length){ fileInput.files = e.dataTransfer.files; propose(e.dataTransfer.files); } });
+
+loadFields();
+</script>
+</body>
+</html>

@@ -153,6 +153,7 @@ _FIELDS: List[CanonicalField] = [
                    dtype="bool", agg="any"),
 ]
 
+FIELDS = _FIELDS                       # public alias — the canonical field registry
 FIELDS_BY_ID: Dict[str, CanonicalField] = {f.id: f for f in _FIELDS}
 KEY_FIELDS = ("national_id", "customer_id")
 
@@ -674,6 +675,67 @@ def _aggregate(df: pd.DataFrame, key_col: str,
 
 def _mask(key: str) -> str:
     return ("•" * max(0, len(key) - 4)) + key[-4:] if key else ""
+
+
+def propose_tables(paths: List[str | Path], use_ai: bool = False,
+                   mapping_book: Optional[MappingBook] = None,
+                   sample_n: int = 3) -> List[Dict[str, Any]]:
+    """Read files and return a per-table proposed mapping for human review.
+
+    Each table carries its columns with the proposed canonical field, a
+    confidence, a Hebrew reason, the mapping source (ai/heuristic/learned) and a
+    few sample values — everything the review UI needs. A learned+approved
+    mapping is returned as-is (approved=True) instead of being re-proposed.
+    """
+    tables: List[Dict[str, Any]] = []
+    frames: List[Tuple[str, pd.DataFrame]] = []
+    for p in paths:
+        try:
+            frames.extend(_read_frames(Path(p)))
+        except Exception:  # noqa: BLE001
+            continue
+    for label, df in frames:
+        if df is None or df.empty:
+            continue
+        df = df.dropna(axis=1, how="all")
+        columns = [str(c) for c in df.columns]
+        df.columns = columns
+        sig = table_signature(columns)
+        samples = {c: _samples(df, c, sample_n) for c in columns}
+        learned = mapping_book.get(sig) if mapping_book else None
+        if learned and learned.approved:
+            col_maps, grain, approved = learned.columns, learned.grain, True
+        else:
+            col_maps = map_columns(columns, samples, use_ai=use_ai)
+            grain = detect_grain(df, _key_column(col_maps))
+            approved = False
+        tables.append({
+            "label": label, "signature": sig, "grain": grain, "approved": approved,
+            "rows": int(len(df)),
+            "columns": [{**cm.to_dict(),
+                         "samples": [str(s) for s in samples.get(cm.column, [])]}
+                        for cm in col_maps],
+        })
+    return tables
+
+
+def apply_and_ingest(paths: List[str | Path],
+                     approved: Dict[str, Dict[str, Any]],
+                     mapping_book: MappingBook) -> IngestResult:
+    """Persist analyst-approved mappings, then re-ingest deterministically.
+
+    ``approved`` maps a table signature to ``{"grain", "columns":[{column,
+    field}]}``. Each becomes an approved :class:`SchemaMapping` in the book, so
+    the subsequent :func:`ingest_files` reuses it without re-guessing.
+    """
+    for sig, spec in approved.items():
+        cols = [ColumnMap(column=c["column"], field=(c.get("field") or None),
+                          confidence=1.0 if c.get("field") else 0.0,
+                          reason_he="אושר ע\"י אנליסט", source="manual")
+                for c in spec.get("columns", [])]
+        mapping_book.put(SchemaMapping(signature=sig, columns=cols,
+                                       grain=spec.get("grain", "customer"), approved=True))
+    return ingest_files(paths, mapping_book=mapping_book)
 
 
 def ingest_directory(directory: str | Path, **kwargs) -> IngestResult:

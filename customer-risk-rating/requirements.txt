@@ -3,10 +3,11 @@ pandas>=2.0          # קריאה ומיזוג של טבלאות הנתונים
 PyYAML>=6.0          # טעינת מודל הניקוד (scoring_model.yaml)
 openpyxl>=3.1        # תמיכה בקבצי Excel (.xlsx) בנוסף ל-CSV
 
-# ── ממשק Web (אופציונלי) ─────────────────────────────────────
+# ── ממשק Web + שרת קליטה (אופציונלי) ─────────────────────────
 # להרצת השרת:  uvicorn risk_rating.api:app --reload
 fastapi>=0.110
 uvicorn>=0.29
+python-multipart>=0.0.9   # העלאת קבצי אקסל דרך /api/ingest/propose
 
 # ── חוות דעת מבוססת-AI (אופציונלי) ───────────────────────────
 # דורש הגדרת ANTHROPIC_API_KEY
