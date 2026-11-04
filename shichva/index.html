@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>יומן השכבה · סיכום יומי של השיעורים</title>
+
+<meta name="description" content="כל השיעורים של השכבה במקום אחד. ממלאים רמת שיעמום, ציטוטים, תמונות וכמה פעמים אמרו 67 — ובסוף כל יום מקבלים סיכום באחוזים של כל השכבה." />
+<meta name="theme-color" content="#0d0f1a" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="יומן השכבה 📓" />
+<meta property="og:description" content="ממלאים את השיעורים של היום — ובעשר בלילה יוצא סיכום באחוזים של כל השכבה. שיעמום, ציטוטים, תמונות וכמה פעמים אמרו 67." />
+<meta property="og:locale" content="he_IL" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Secular+One&family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%237c6cff'/><text y='70' x='50' font-size='56' text-anchor='middle' fill='white' font-family='sans-serif'>📓</text></svg>" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="top">
+    <div class="top-row">
+      <button class="icon-btn" id="btnBack" style="display:none" aria-label="חזור">→</button>
+      <div class="brand">
+        <div class="brand-logo" id="brandLogo">📓</div>
+        <div class="brand-txt">
+          <div class="brand-name" id="brandName">יומן השכבה</div>
+          <div class="brand-sub" id="brandSub">טוען…</div>
+        </div>
+      </div>
+      <button class="icon-btn" id="btnHistory" aria-label="היסטוריה">📅</button>
+      <button class="icon-btn" id="btnSettings" aria-label="הגדרות">⚙️<span class="sync-dot" id="syncDot"></span></button>
+    </div>
+  </header>
+
+  <!-- ============ HOME ============ -->
+  <section class="screen on" id="scHome">
+    <div class="daybar" id="dayBar">
+      <div class="daybar-ic" id="dayBarIc">☀️</div>
+      <div class="daybar-main">
+        <div class="daybar-date" id="dayBarDate">—</div>
+        <div class="daybar-sub" id="dayBarSub">—</div>
+      </div>
+    </div>
+
+    <div class="sec-head"><h2>השיעורים</h2><span class="count" id="lessonsCount"></span></div>
+    <div class="card pad0" id="lessonsList"></div>
+
+    <div class="btn-row" id="homeActions"></div>
+    <div id="todaySummaryWrap"></div>
+  </section>
+
+  <!-- ============ LESSON ============ -->
+  <section class="screen" id="scLesson">
+    <div class="card" id="lessonHero"></div>
+    <div class="sec-head"><h2>המילוי שלי</h2><span class="count" id="lessonMeState"></span></div>
+    <div class="card pad0" id="paramsForm"></div>
+    <div class="btn-row">
+      <button class="btn primary" id="btnSaveEntry">שמור</button>
+    </div>
+    <div id="lessonAgg"></div>
+  </section>
+
+  <!-- ============ DAY SUMMARY ============ -->
+  <section class="screen" id="scDay"></section>
+
+  <!-- ============ HISTORY ============ -->
+  <section class="screen" id="scHistory">
+    <div class="sec-head"><h2>היסטוריה</h2><span class="count" id="histCount"></span></div>
+    <div class="card pad0" id="histList"></div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="screen" id="scSettings">
+    <div class="sec-head"><h2>אני</h2></div>
+    <div class="card">
+      <div class="field" style="margin-top:0">
+        <label for="inpMyName">השם שלי</label>
+        <input class="inp" id="inpMyName" placeholder="איך קוראים לך?" maxlength="24" />
+        <div class="hint">מופיע ליד הציטוטים והתמונות שאתה מעלה.</div>
+      </div>
+    </div>
+
+    <div class="sec-head"><h2>השיעורים</h2><span class="count" id="setLessonsCount"></span></div>
+    <div class="card pad0" id="setLessonsList"></div>
+    <div class="btn-row"><button class="btn lime" id="btnAddLesson">➕ הוסף שיעור</button></div>
+
+    <div class="sec-head"><h2>הפרמטרים</h2><span class="count" id="setParamsCount"></span></div>
+    <div class="card pad0" id="setParamsList"></div>
+    <div class="btn-row"><button class="btn lime" id="btnAddParam">➕ הוסף פרמטר</button></div>
+
+    <div class="sec-head"><h2>השכבה</h2></div>
+    <div class="card">
+      <div class="field" style="margin-top:0">
+        <label for="inpGradeName">שם השכבה</label>
+        <input class="inp" id="inpGradeName" placeholder="למשל: שכבת ט'" maxlength="30" />
+      </div>
+      <div class="field">
+        <label for="inpLockHour">אפשר למלא עד השעה</label>
+        <select class="inp" id="inpLockHour"></select>
+        <div class="hint">בשעה הזאת היום נסגר, מחושב סיכום, והוא נשמר בהיסטוריה. יום חדש מתחיל בחצות.</div>
+      </div>
+    </div>
+
+    <div class="sec-head"><h2>שיתוף ונתונים</h2></div>
+    <div class="card" id="syncCard"></div>
+
+    <div class="divider"></div>
+    <div class="btn-row">
+      <button class="btn ghost sm" id="btnExport">⬇️ ייצוא גיבוי</button>
+      <button class="btn ghost sm" id="btnImport">⬆️ ייבוא</button>
+    </div>
+    <div class="btn-row"><button class="btn danger sm" id="btnReset">איפוס האפליקציה במכשיר הזה</button></div>
+    <div class="hint" style="text-align:center;margin-top:18px;opacity:.6">יומן השכבה · v1</div>
+  </section>
+
+</div>
+
+<!-- ============ SHEET ============ -->
+<div class="sheet-wrap" id="sheetWrap">
+  <div class="sheet-bg" id="sheetBg"></div>
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<input type="file" id="filePick" accept="image/*" style="display:none" />
+<input type="file" id="jsonPick" accept="application/json,.json" style="display:none" />
+
+<script src="app.js"></script>
+</body>
+</html>
