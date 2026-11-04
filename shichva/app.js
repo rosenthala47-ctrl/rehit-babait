@@ -800,7 +800,7 @@ async function renderDay(dk) {
       </div>` : ''}
 
     <div class="hl-grid">
-      ${topSub ? `<div class="hl"><div class="hl-ic">${esc(topSub.icon || '📚')}</div><div class="hl-val"><span class="rtl-num">${topVal}%</span></div><div class="hl-lbl">הכי ${esc(firstScale.name)}<br>${esc(topSub.name)}${topSub.teacher ? ' · ' + esc(topSub.teacher) : ''}</div></div>` : ''}
+      ${topSub ? `<div class="hl"><div class="hl-ic">${esc(topSub.icon || '📚')}</div><div class="hl-val"><span class="rtl-num">${topVal}%</span></div><div class="hl-lbl">הכי גבוה ב${esc(firstScale.name)}<br>${esc(topSub.name)}${topSub.teacher ? ' · ' + esc(topSub.teacher) : ''}</div></div>` : ''}
       ${counter ? `<div class="hl"><div class="hl-ic">${esc(counter.icon || '🔢')}</div><div class="hl-val"><span class="rtl-num">${(sum.totals[counter.id] || {}).dayTotal || 0}</span></div><div class="hl-lbl">${esc(counter.name)}<br>בכל היום</div></div>` : ''}
       <div class="hl"><div class="hl-ic">💬</div><div class="hl-val"><span class="rtl-num">${quotes.length}</span></div><div class="hl-lbl">ציטוטים</div></div>
       <div class="hl"><div class="hl-ic">📸</div><div class="hl-val"><span class="rtl-num">${photos.length}</span></div><div class="hl-lbl">תמונות</div></div>
