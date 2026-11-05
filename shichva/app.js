@@ -54,6 +54,7 @@ const LS = {
   photo:  ref => `shichva.ph.${ref}`,
   phIdx:  'shichva.phidx',
   outbox: 'shichva.outbox.v1',
+  fb:     'shichva.fbhost.v1',
 };
 
 function lsGet(k, def = null) {
@@ -141,6 +142,40 @@ function msToMidnight() { const d = new Date(), t = new Date(d); t.setHours(24, 
    CLOUD — keyless shared storage
    ============================================================ */
 const BACKENDS = {
+  // Your own free Firebase Realtime Database, over plain REST.
+  // No SDK and no API key: the database URL is the whole configuration.
+  fb: {
+    label: 'Firebase שלכם',
+    host() {
+      const h = lsGet(LS.fb, '');
+      if (h) return h;
+      // someone who joined via a shared fb link keeps writing to that same database
+      const ref = String(Cloud.coreRef || '');
+      if (ref.slice(0, 3) === 'fb:') return ref.slice(3).split('/')[0];
+      throw new Error('no-url');
+    },
+    async create(obj) {
+      const r = await fetch(`https://${this.host()}/spaces.json`, {
+        method: 'POST', body: JSON.stringify(obj),
+      });
+      if (!r.ok) throw new Error('create ' + r.status);
+      const j = await r.json();
+      if (!j || !j.name) throw new Error('no-key');
+      return 'fb:' + this.host() + '/spaces/' + j.name;
+    },
+    async read(ref) {
+      const r = await fetch(`https://${ref.slice(3)}.json`, { cache: 'no-store' });
+      if (!r.ok) throw new Error('read ' + r.status);
+      return await r.json();                 // null when the path is empty
+    },
+    async write(ref, obj) {
+      const r = await fetch(`https://${ref.slice(3)}.json`, {
+        method: 'PUT', body: JSON.stringify(obj),
+      });
+      if (!r.ok) throw new Error('write ' + r.status);
+      return true;
+    },
+  },
   jb: {
     label: 'jsonblob.com',
     async create(obj) {
@@ -221,14 +256,52 @@ function setStatus(s, err = '') {
 
 async function cloudRead(ref)      { const b = refBackend(ref); if (!b) throw new Error('bad-ref'); return b.read(ref); }
 async function cloudWrite(ref, o)  { const b = refBackend(ref); if (!b) throw new Error('bad-ref'); return b.write(ref, o); }
+function backendOrder(hint) {
+  const all = Object.keys(BACKENDS);
+  const has = !!lsGet(LS.fb, '') || String(Cloud.coreRef || '').slice(0, 3) === 'fb:';
+  const pref = [];
+  if (hint && BACKENDS[hint]) pref.push(hint);
+  if (has && !pref.includes('fb')) pref.push('fb');     // a configured DB of your own wins
+  return [...pref, ...all.filter(k => k !== 'fb' && !pref.includes(k))]
+    .filter(k => k !== 'fb' || has);
+}
 async function cloudCreate(obj, hint) {
-  const order = hint ? [hint, ...Object.keys(BACKENDS).filter(k => k !== hint)] : Object.keys(BACKENDS);
-  let last = '';
-  for (const k of order) {
+  const errs = [];
+  for (const k of backendOrder(hint)) {
     try { return await BACKENDS[k].create(obj); }
-    catch (e) { last = k + ': ' + e.message; console.warn('backend', k, e); }
+    catch (e) { errs.push(`${BACKENDS[k].label}: ${e.message}`); console.warn('backend', k, e); }
   }
-  throw new Error(last || 'no-backend');
+  const err = new Error(errs.join(' | ') || 'no-backend');
+  err.perBackend = errs;
+  throw err;
+}
+
+/* Try a full create -> read -> write cycle on each backend and report what happened,
+   so a failure can be diagnosed from the phone instead of guessed at. */
+async function runDiagnostics() {
+  const out = [];
+  for (const k of Object.keys(BACKENDS)) {
+    const b = BACKENDS[k];
+    if (k === 'fb' && !lsGet(LS.fb, '')) { out.push({ k, label: b.label, skip: 'לא הוגדרה כתובת' }); continue; }
+    const t0 = Date.now();
+    const row = { k, label: b.label };
+    try {
+      const ref = await b.create({ t: 'בדיקה', at: Date.now() });
+      row.create = 'OK';
+      const back = await b.read(ref);
+      row.read = back && back.t === 'בדיקה' ? 'OK' : 'החזיר נתון לא צפוי';
+      await b.write(ref, { t: 'בדיקה2', at: Date.now() });
+      const back2 = await b.read(ref);
+      row.write = back2 && back2.t === 'בדיקה2' ? 'OK' : 'הכתיבה לא נשמרה';
+      row.ok = row.create === 'OK' && row.read === 'OK' && row.write === 'OK';
+    } catch (e) {
+      row.err = e.message;
+      row.ok = false;
+    }
+    row.ms = Date.now() - t0;
+    out.push(row);
+  }
+  return out;
 }
 
 /* ---- merge helpers ---- */
@@ -1110,7 +1183,12 @@ function renderSyncCard() {
       </div>
       <div class="note">כדי שכל השכבה תמלא לאותו מקום ותראה סיכום משותף, צריך ליצור <b>מרחב שכבה</b> פעם אחת. תקבלו קישור — וכל מי שייכנס דרכו ימלא לאותם נתונים.</div>
       <div class="btn-row"><button class="btn primary" data-act="create-space">🌐 צור מרחב שכבה ותן לי קישור</button></div>
-      <div class="btn-row"><button class="btn ghost sm" data-act="join-space" style="width:100%">יש לי כבר קוד שכבה — חבר אותי</button></div>`;
+      <div class="btn-row">
+        <button class="btn ghost sm" data-act="join-space" style="width:100%">יש לי קוד שכבה</button>
+        <button class="btn ghost sm" data-act="diag" style="width:100%">🔌 בדיקת חיבור</button>
+      </div>
+      <div class="btn-row"><button class="btn ghost sm" data-act="fb-setup" style="width:100%">🔥 חבר מסד נתונים משלי (עובד תמיד)</button></div>
+      ${lsGet(LS.fb, '') ? `<div class="hint" style="text-align:center">מחובר ל-Firebase שלכם: <span dir="ltr">${esc(lsGet(LS.fb, ''))}</span></div>` : ''}`;
     return;
   }
   const st = Cloud.status;
@@ -1129,7 +1207,11 @@ function renderSyncCard() {
       <button class="btn primary" data-act="share-link">📤 שתף</button>
       <button class="btn" data-act="copy-link">העתק</button>
     </div>
-    <div class="btn-row"><button class="btn ghost sm" data-act="sync-now" style="width:100%">🔄 סנכרן עכשיו</button></div>
+    <div class="btn-row">
+      <button class="btn ghost sm" data-act="sync-now" style="width:100%">🔄 סנכרן</button>
+      <button class="btn ghost sm" data-act="diag" style="width:100%">🔌 בדיקה</button>
+      <button class="btn ghost sm" data-act="fb-setup" style="width:100%">🔥 מסד</button>
+    </div>
     ${st === 'off' ? `<div class="note">⚠️ <b>לא מצליח להתחבר</b> לאחסון המשותף (${esc(Cloud.lastErr || '')}). מה שמילאתם נשמר במכשיר ויישלח אוטומטית כשהחיבור יחזור.</div>` : ''}
     <div class="note">כל מי שיש לו הקישור יכול לראות ולמלא. אל תעלו דברים שלא מתאים שיראו.</div>`;
 }
@@ -1251,6 +1333,55 @@ function sheetJoin() {
     </div>`);
 }
 
+async function sheetDiagnostics() {
+  sheet(`<h3>בדיקת חיבור</h3><div class="sheet-sub">בודק כל שירות אחסון: יצירה, קריאה וכתיבה.</div>
+    <div class="center-load"><span class="spin"></span> בודק…</div>`);
+  const rows = await runDiagnostics();
+  const txt = rows.map(r => r.skip ? `${r.label}: דילוג (${r.skip})`
+    : `${r.label}: ${r.ok ? 'תקין' : 'נכשל'}${r.err ? ' — ' + r.err : ''}${r.create ? ` [create=${r.create} read=${r.read} write=${r.write}]` : ''} (${r.ms}ms)`).join('\n');
+  const html = rows.map(r => {
+    if (r.skip) return `<div class="agg-row"><div class="agg-ic">⚪</div><div class="agg-main">
+      <div class="agg-name">${esc(r.label)}</div><div class="agg-meta">${esc(r.skip)}</div></div></div>`;
+    return `<div class="agg-row"><div class="agg-ic">${r.ok ? '✅' : '❌'}</div><div class="agg-main">
+      <div class="agg-name">${esc(r.label)}</div>
+      <div class="agg-meta" dir="ltr" style="text-align:left">${esc(r.err ? r.err : `create=${r.create} read=${r.read} write=${r.write}`)} · ${r.ms}ms</div>
+    </div></div>`;
+  }).join('');
+  const anyOk = rows.some(r => r.ok);
+  sheet(`<h3>בדיקת חיבור</h3>
+    <div class="sheet-sub">${anyOk ? 'יש שירות שעובד — אפשר ליצור מרחב שכבה.' : 'אף שירות חינמי לא עובד מהמכשיר הזה.'}</div>
+    <div class="card" style="margin-top:12px">${html}</div>
+    ${anyOk ? `<div class="btn-row"><button class="btn primary" data-act="create-space">צור מרחב שכבה</button></div>`
+             : `<div class="note">זה בדרך כלל חסימה של השירות עצמו או של הרשת. הפתרון היציב הוא מסד נתונים חינמי משלכם.</div>
+                <div class="btn-row"><button class="btn primary" data-act="fb-setup">🔥 הגדר Firebase</button></div>`}
+    <div class="btn-row">
+      <button class="btn ghost sm" data-act="copy-diag" data-txt="${esc(txt)}" style="width:100%">העתק את התוצאה</button>
+      <button class="btn ghost sm" data-act="close-sheet" style="width:100%">סגור</button>
+    </div>`);
+}
+
+function sheetFirebase() {
+  const cur = lsGet(LS.fb, '');
+  sheet(`<h3>🔥 מסד נתונים משלכם</h3>
+    <div class="sheet-sub">חינמי, בלי כרטיס אשראי, ואי אפשר שיימחק לכם על ידי אף אחד. פעם אחת בלבד.</div>
+    <div class="note" style="line-height:1.9">
+      <b>1.</b> היכנסו ל-<span dir="ltr">console.firebase.google.com</span> עם חשבון גוגל.<br>
+      <b>2.</b> <b>Add project</b> → תנו שם → אפשר לכבות Analytics → <b>Create</b>.<br>
+      <b>3.</b> בתפריט: <b>Build → Realtime Database</b> → <b>Create Database</b> → בחרו אזור → <b>Start in locked mode</b> → Enable.<br>
+      <b>4.</b> לשונית <b>Rules</b>, הדביקו בדיוק את זה ולחצו <b>Publish</b>:
+      <div class="link-box" style="margin-top:8px">{ "rules": { ".read": true, ".write": true } }</div>
+      <b>5.</b> בלשונית <b>Data</b> העתיקו את הכתובת שלמעלה (מתחילה ב-<span dir="ltr">https://</span> ומסתיימת ב-<span dir="ltr">firebasedatabase.app</span>) והדביקו כאן:
+    </div>
+    <div class="field"><label for="fbUrl">כתובת מסד הנתונים</label>
+      <input class="inp" id="fbUrl" dir="ltr" style="text-align:left" placeholder="https://xxx-default-rtdb.firebasedatabase.app" value="${esc(cur)}" /></div>
+    <div class="note">⚠️ הכללים האלה פותחים את המסד לכל מי שיש לו את הכתובת — בדיוק כמו שביקשת: בלי הרשמה לתלמידים. אל תשתמשו במסד הזה לשום דבר אחר.</div>
+    <div class="btn-row">
+      <button class="btn primary" data-act="fb-save">שמור ובדוק</button>
+      <button class="btn ghost" data-act="close-sheet">ביטול</button>
+    </div>`);
+  setTimeout(() => $('#fbUrl') && $('#fbUrl').focus(), 150);
+}
+
 function sheetWelcome() {
   sheet(`<h3>ברוכים הבאים 📓</h3>
     <div class="sheet-sub">איך קוראים לך? השם מופיע ליד הציטוטים והתמונות שתעלה.</div>
@@ -1301,13 +1432,21 @@ async function createSpace() {
   } catch (e) {
     setStatus('local');
     Cloud.coreRef = null;
+    const list = (e.perBackend && e.perBackend.length ? e.perBackend : [e.message])
+      .map(x => `<div class="quote"><div class="quote-txt" dir="ltr" style="font-size:12.5px;text-align:left">${esc(x)}</div></div>`).join('');
     sheet(`<h3>לא הצלחתי ליצור מרחב משותף 😕</h3>
-      <div class="sheet-sub">שירותי האחסון החינמיים לא ענו (${esc(e.message)}).</div>
-      <div class="note">האפליקציה ממשיכה לעבוד רגיל — הנתונים נשמרים במכשיר. אפשר לנסות שוב בעוד כמה דקות, או להשתמש ב"ייצוא גיבוי" כדי להעביר נתונים בין מכשירים.</div>
+      <div class="sheet-sub">זה מה שכל שירות אחסון החזיר:</div>
+      ${list}
+      <div class="note">האפליקציה ממשיכה לעבוד רגיל — הכול נשמר במכשיר.<br><br>
+        <b>הדרך שתמיד עובדת:</b> מסד נתונים חינמי משלכם ב-Firebase. זה כ-5 דקות של לחיצות, פעם אחת, ואז הקישור עובד לכל השכבה בלי הגבלות.</div>
       <div class="btn-row">
-        <button class="btn primary" data-act="create-space">נסה שוב</button>
-        <button class="btn ghost" data-act="close-sheet">סגור</button>
-      </div>`);
+        <button class="btn primary" data-act="fb-setup">🔥 בוא נגדיר Firebase</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn ghost sm" data-act="create-space" style="width:100%">נסה שוב</button>
+        <button class="btn ghost sm" data-act="diag" style="width:100%">בדיקת חיבור</button>
+      </div>
+      <div class="btn-row"><button class="btn ghost sm" data-act="close-sheet" style="width:100%">סגור</button></div>`);
   } finally { Cloud.probing = false; }
 }
 
@@ -1474,6 +1613,37 @@ document.addEventListener('click', async (ev) => {
     }
 
     case 'create-space': closeSheet(); await createSpace(); break;
+    case 'diag':      closeSheet(); await sheetDiagnostics(); break;
+    case 'fb-setup':  closeSheet(); sheetFirebase(); break;
+    case 'copy-diag':
+      try { await navigator.clipboard.writeText(el.dataset.txt || ''); toast('הועתק 📋', 'good'); }
+      catch (e2) { toast('לא הצלחתי להעתיק', 'bad'); }
+      break;
+    case 'fb-save': {
+      let h = ($('#fbUrl').value || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '').replace(/\.json$/, '');
+      if (!h) { lsSet(LS.fb, ''); toast('הכתובת נוקתה'); renderSettings(); break; }
+      if (!/^[a-z0-9-]+([.][a-z0-9-]+)+$/i.test(h)) { toast('הכתובת לא נראית תקינה', 'bad'); break; }
+      lsSet(LS.fb, h);
+      toast('בודק את המסד…');
+      try {
+        const ref = await BACKENDS.fb.create({ t: 'בדיקה', at: nowTs() });
+        const back = await BACKENDS.fb.read(ref);
+        if (!back || back.t !== 'בדיקה') throw new Error('הקריאה לא החזירה את מה שנכתב');
+        closeSheet();
+        toast('המסד עובד ✅ יוצר מרחב שכבה…', 'good');
+        await createSpace();
+      } catch (e2) {
+        toast('המסד לא עונה: ' + e2.message, 'bad');
+        sheet(`<h3>המסד לא ענה 😕</h3>
+          <div class="sheet-sub" dir="ltr" style="text-align:left">${esc(e2.message)}</div>
+          <div class="note">בדקו ש-<b>Rules</b> פורסמו עם <span dir="ltr">".read": true, ".write": true</span>, ושהכתובת הועתקה במלואה מלשונית <b>Data</b>.</div>
+          <div class="btn-row">
+            <button class="btn primary" data-act="fb-setup">חזרה להגדרה</button>
+            <button class="btn ghost" data-act="close-sheet">סגור</button>
+          </div>`);
+      }
+      break;
+    }
     case 'join-space':   sheetJoin(); break;
     case 'do-join':      await joinSpace($('#jnCode').value); break;
     case 'sync-now':
