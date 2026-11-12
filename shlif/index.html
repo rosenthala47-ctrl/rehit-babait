@@ -234,8 +234,8 @@ bdi { unicode-bidi: isolate; }
 }
 .hit > button:hover { background: var(--sunken); }
 .hit > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.hit .title { font-weight: 600; overflow-wrap: anywhere; }
-.hit .fields { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+.hit .title { font-weight: 600; overflow-wrap: anywhere; grid-column: 1; }
+.hit .fields { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; grid-column: 1; }
 .hit .fields span + span::before { content: " · "; }
 .hit .fields em { font-style: normal; color: var(--ink); }
 .hit .src { color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; grid-column: 1; }
@@ -305,6 +305,7 @@ dialog::backdrop { background: rgba(10, 16, 12, .5); }
   .search .btn { padding: 10px 12px; }
   .cell { padding: 14px 14px 16px; }
   .hit > button { padding: 11px 12px; gap: 3px 10px; }
+  .hit .tv { max-width: 34vw; }
   .hit .tv b { font-size: 1.15rem; }
 }
 @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
