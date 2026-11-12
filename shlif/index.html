@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>שליף</title>
+<meta name="description" content="כותבים מה מחפשים — ושליף שולף את התשובה מתוך מאות קבצי אקסל. הכול נשאר במחשב שלכם.">
+<meta property="og:title" content="שליף — שולפים תשובה מתוך מאות אקסלים">
+<meta property="og:description" content="נייר טואלט, מותג, כמה מלאי — ומקבלים את המספר, עם הקובץ והתא שממנו הגיע.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@700;900&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&display=swap">
+<style>
+/* פריסה: טור אחד צר — שורת חיפוש, "התא הנבחר" עם התשובה, ומתחתיו השורות שנמצאו. */
+:root {
+  --bg: #f1f4ef;
+  --surface: #ffffff;
+  --sunken: #e8ede6;
+  --ink: #15201a;
+  --muted: #5a695f;
+  --line: #d3dbd1;
+  --accent: #0d6843;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefe4;
+  --mark: #ffe36e;
+  --mark-ink: #2a2300;
+  --warn: #7d5200;
+  --warn-soft: #fbeecb;
+  --bad: #b3261e;
+  --shadow: 0 1px 2px rgba(21, 32, 26, .06), 0 8px 24px rgba(21, 32, 26, .06);
+  --font-display: 'Frank Ruhl Libre', 'David Libre', 'David', 'Times New Roman', serif;
+  --font-body: 'IBM Plex Sans Hebrew', 'Heebo', 'Segoe UI', 'Arial Hebrew', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1411; --surface: #161e19; --sunken: #111814; --ink: #e6ede8; --muted: #94a59a; --line: #2a362f;
+    --accent: #4ac48c; --accent-ink: #04231a; --accent-soft: #15342a; --mark: #e6c23c; --mark-ink: #1d1800;
+    --warn: #efc264; --warn-soft: #392e12; --bad: #ff8a80;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1411; --surface: #161e19; --sunken: #111814; --ink: #e6ede8; --muted: #94a59a; --line: #2a362f;
+  --accent: #4ac48c; --accent-ink: #04231a; --accent-soft: #15342a; --mark: #e6c23c; --mark-ink: #1d1800;
+  --warn: #efc264; --warn-soft: #392e12; --bad: #ff8a80;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+}
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+bdi { unicode-bidi: isolate; }
+.mono { font-family: var(--font-mono); font-size: .86em; direction: ltr; unicode-bidi: isolate; }
+
+.app {
+  max-width: 860px;
+  margin: 0 auto;
+  padding-block: 20px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---------- כותרת ---------- */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.logo {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: -.01em;
+  position: relative;
+  padding-inline-end: 12px;
+}
+.logo::after { /* ידית המילוי של תא נבחר */
+  content: "";
+  position: absolute;
+  inset-inline-end: 0;
+  bottom: 3px;
+  width: 8px; height: 8px;
+  background: var(--accent);
+}
+.tag { color: var(--muted); font-size: .92rem; }
+.status {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: .9rem;
+  font-variant-numeric: tabular-nums;
+}
+.status:hover { border-color: var(--accent); }
+.status svg { width: 16px; height: 16px; flex: none; color: var(--accent); }
+
+/* ---------- התקדמות ---------- */
+.progress { display: flex; flex-direction: column; gap: 6px; font-size: .88rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { height: 4px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+
+/* ---------- חיבור קבצים ---------- */
+.connect {
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  background: transparent;
+}
+.connect p { margin: 0; flex: 1 1 280px; min-width: 0; font-size: .95rem; }
+.connect small { display: block; color: var(--muted); font-size: .84rem; }
+.connect .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 500;
+  font-size: .93rem;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--bad); }
+.btn.small { padding: 5px 10px; font-size: .85rem; }
+
+/* ---------- חיפוש ---------- */
+.search {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+  border-radius: 12px;
+  padding: 6px 6px 6px 6px;
+  padding-inline-start: 16px;
+  box-shadow: var(--shadow);
+}
+.search:focus-within { border-color: var(--accent); }
+.search svg { width: 20px; height: 20px; flex: none; color: var(--muted); }
+.search input {
+  flex: 1; min-width: 0;
+  border: 0; outline: 0; background: transparent;
+  font-size: 1.15rem;
+  padding: 10px 4px;
+}
+.search input::placeholder { color: var(--muted); opacity: .8; }
+.search input::-webkit-search-cancel-button { display: none; }
+.search .btn { padding: 10px 18px; font-size: 1rem; border-radius: 8px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: .88rem; color: var(--muted); }
+.chip {
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: .88rem;
+  color: var(--ink);
+  max-width: 100%;
+  text-align: start;
+}
+.chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chip b { font-weight: 600; font-variant-numeric: tabular-nums; margin-inline-start: 6px; }
+
+/* ---------- התשובה: תא נבחר ---------- */
+.cell {
+  position: relative;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  padding: 16px 20px 18px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.cell::after { /* ידית המילוי בפינת התא */
+  content: "";
+  position: absolute;
+  inset-inline-end: -6px; bottom: -6px;
+  width: 10px; height: 10px;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+}
+.cell .label { color: var(--muted); font-size: .9rem; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.cell .addr {
+  font-family: var(--font-mono); font-size: .78rem; direction: ltr;
+  background: var(--sunken); border: 1px solid var(--line);
+  padding: 0 6px; border-radius: 3px; color: var(--ink);
+}
+.cell .value {
+  font-size: clamp(2.4rem, 9vw, 3.8rem);
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  overflow-wrap: anywhere;
+}
+.cell .value.text { font-size: clamp(1.5rem, 5vw, 2.1rem); letter-spacing: 0; }
+.cell .value small { font-size: .38em; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-inline-start: 8px; }
+.cell .sub { color: var(--muted); font-size: .95rem; overflow-wrap: anywhere; }
+.cell .sub strong { color: var(--ink); font-weight: 600; }
+.cell .extra { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; font-size: .95rem; }
+.cell .extra span b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.note {
+  background: var(--warn-soft); color: var(--warn);
+  border-radius: 8px; padding: 8px 12px; font-size: .9rem;
+}
+.breakdown { display: flex; flex-direction: column; gap: 8px; }
+.breakdown h3, .results-head { margin: 0; font-size: .82rem; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+
+/* ---------- שורות שנמצאו ---------- */
+.results-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.hits { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.hit { border-bottom: 1px solid var(--line); }
+.hit:last-child { border-bottom: 0; }
+.hit > button {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center;
+  width: 100%; padding: 12px 16px;
+}
+.hit > button:hover { background: var(--sunken); }
+.hit > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hit .title { font-weight: 600; overflow-wrap: anywhere; }
+.hit .fields { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+.hit .fields span + span::before { content: " · "; }
+.hit .fields em { font-style: normal; color: var(--ink); }
+.hit .src { color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; grid-column: 1; }
+.hit .tv { grid-row: 1 / span 3; grid-column: 2; text-align: end; display: flex; flex-direction: column; gap: 2px; max-width: 38vw; }
+.hit .tv b { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.hit .tv small { color: var(--muted); font-size: .76rem; }
+.hit .tv b.zero { color: var(--bad); }
+mark { background: var(--mark); color: var(--mark-ink); border-radius: 2px; padding: 0 1px; }
+.detail {
+  margin: 0; padding: 4px 16px 14px;
+  display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr); gap: 0;
+  font-size: .9rem;
+}
+.detail dt, .detail dd { margin: 0; padding: 5px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.detail dt { color: var(--muted); background: var(--sunken); border-inline-end: 1px solid var(--line); display: flex; gap: 8px; align-items: baseline; }
+.detail dt .mono { color: var(--muted); opacity: .75; flex: none; min-width: 3.2em; }
+.detail dd.t { font-weight: 600; background: var(--accent-soft); }
+.more { align-self: center; }
+.empty { color: var(--muted); text-align: center; padding: 28px 12px; }
+.empty strong { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: 4px; }
+.foot { color: var(--muted); font-size: .8rem; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ---------- חלון הקבצים ---------- */
+dialog {
+  border: 1px solid var(--line); border-radius: 12px; padding: 0;
+  background: var(--surface); color: var(--ink);
+  width: min(680px, calc(100vw - 24px)); max-height: min(86vh, 760px);
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(10, 16, 12, .5); }
+.dlg { display: flex; flex-direction: column; max-height: inherit; }
+.dlg header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.dlg h2 { margin: 0; font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; }
+.dlg .x { border: 0; background: transparent; font-size: 1.4rem; line-height: 1; padding: 4px 8px; border-radius: 6px; }
+.dlg .x:hover { background: var(--sunken); }
+.dlg .tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.dlg .tools input { flex: 1 1 160px; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); }
+.files { overflow: auto; padding: 4px 0; flex: 1; min-height: 80px; }
+.file { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 12px; align-items: center; padding: 7px 18px; font-size: .9rem; }
+.file:hover { background: var(--sunken); }
+.file .n { overflow-wrap: anywhere; }
+.file .p { color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
+.file .c { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .84rem; }
+.file .e { color: var(--bad); font-size: .82rem; grid-column: 1 / -1; }
+.file button { border: 0; background: transparent; color: var(--muted); padding: 2px 8px; border-radius: 6px; font-size: 1.1rem; line-height: 1; }
+.file button:hover { color: var(--bad); background: var(--surface); }
+.dlg footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); font-size: .84rem; color: var(--muted); align-items: center; }
+
+.veil {
+  position: fixed; inset: 0; z-index: 50;
+  background: color-mix(in srgb, var(--accent) 88%, transparent);
+  color: var(--accent-ink);
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-size: clamp(1.6rem, 6vw, 2.6rem); font-weight: 700;
+  pointer-events: none; text-align: center; padding: 24px;
+}
+.toast {
+  position: fixed; z-index: 60; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg);
+  padding: 9px 16px; border-radius: 8px; font-size: .92rem; max-width: calc(100vw - 32px);
+  box-shadow: var(--shadow);
+}
+@media (max-width: 520px) {
+  .logo { font-size: 1.7rem; }
+  .tag { display: none; }
+  .search input { font-size: 1.02rem; }
+  .search .btn { padding: 10px 12px; }
+  .cell { padding: 14px 14px 16px; }
+  .hit > button { padding: 11px 12px; gap: 3px 10px; }
+  .hit .tv b { font-size: 1.15rem; }
+}
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app" dir="rtl" lang="he">
+
+  <header class="top">
+    <div class="brand">
+      <span class="logo">שליף</span>
+      <span class="tag">כותבים מה מחפשים, מקבלים את התא</span>
+    </div>
+    <button class="status" id="sourcesBtn" type="button" title="הקבצים שלי">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>
+      <span id="statText">טוען…</span>
+    </button>
+  </header>
+
+  <div class="progress" id="progress" hidden>
+    <div class="bar"><i id="progressBar"></i></div>
+    <div id="progressText"></div>
+  </div>
+
+  <section class="connect" id="connect" hidden>
+    <p id="connectText"></p>
+    <div class="actions">
+      <button class="btn primary" id="btnDir" type="button">בחירת תיקייה</button>
+      <button class="btn" id="btnFiles" type="button">בחירת קבצים</button>
+      <button class="btn" id="btnDemo" type="button" hidden>נתוני דוגמה</button>
+    </div>
+  </section>
+
+  <form class="search" id="searchForm" role="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search"
+           aria-label="מה לחפש" placeholder="נייר טואלט, שם המותג, כמה מלאי">
+    <button class="btn primary" type="submit">שליפה</button>
+  </form>
+
+  <div class="chips" id="chips"></div>
+
+  <div id="out" aria-live="polite" style="display:flex;flex-direction:column;gap:18px"></div>
+
+  <dialog id="sources">
+    <div class="dlg">
+      <header>
+        <h2>הקבצים שלי</h2>
+        <button class="x" id="dlgClose" type="button" aria-label="סגירה">×</button>
+      </header>
+      <div class="tools">
+        <button class="btn small primary" id="dlgDir" type="button">הוספת תיקייה</button>
+        <button class="btn small" id="dlgFiles" type="button">הוספת קבצים</button>
+        <button class="btn small" id="dlgRefresh" type="button" hidden>רענון מהתיקייה</button>
+        <input id="fileFilter" type="search" placeholder="סינון לפי שם קובץ" aria-label="סינון לפי שם קובץ">
+      </div>
+      <div class="files" id="fileList"></div>
+      <footer>
+        <span id="dlgSummary"></span>
+        <button class="btn small danger" id="dlgClear" type="button">מחיקת כל הנתונים</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <input type="file" id="pickFiles" multiple hidden accept=".xlsx,.xlsm,.xls,.xlsb,.ods,.csv,.tsv">
+  <input type="file" id="pickDir" webkitdirectory multiple hidden>
+  <div class="veil" id="veil" hidden>שחררו כאן את הקבצים או התיקייה</div>
+  <div class="toast" id="toast" hidden role="status"></div>
+</div>
+<script src="shared.js"></script>
+<script src="demo-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
