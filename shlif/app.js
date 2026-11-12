@@ -60,9 +60,39 @@
       job.shard = slot.i;
       const f = state.files.get(job.path);
       if (f) { f.status = 'working'; f.shard = slot.i; }
-      slot.w.postMessage(job);
+      if (job.type === 'parse') sendFile(slot, job);
+      else slot.w.postMessage(job);
     }
     drawProgress();
+  }
+
+  // קריאת הקובץ בדף עצמו והעברת הבייטים למנוע. כמה דרכים, כי דפדפני טלפון לא תמיד מסכימים לראשונה.
+  function readBytes(file) {
+    const viaReader = () => new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => rej(fr.error || new Error('FileReader'));
+      fr.readAsArrayBuffer(file);
+    });
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    return file.arrayBuffer()
+      .catch(() => viaReader())
+      .catch(() => wait(400).then(() => new Response(file).arrayBuffer()))
+      .catch(() => wait(1200).then(viaReader));
+  }
+  async function sendFile(slot, job) {
+    const file = job.file;
+    job.file = null;
+    try {
+      const buf = await readBytes(file);
+      slot.w.postMessage(Object.assign({}, job, { buf }), [buf]);
+    } catch (e) {
+      const detail = String((e && e.name) || 'Error') + ': ' + String((e && e.message) || e).slice(0, 140);
+      onWorkerMessage(slot, {
+        type: 'fileDone', job: job.id, path: job.path, tables: [], ms: 0, cached: false,
+        meta: { path: job.path, name: job.name, size: job.size, lastModified: job.lastModified, rows: 0, sheets: 0, error: 'הדפדפן לא הצליח לקרוא את הקובץ מהמכשיר', detail },
+      });
+    }
   }
 
   function onWorkerMessage(slot, m) {
@@ -79,6 +109,7 @@
         } else {
           f.status = m.meta.error ? 'error' : 'done';
           f.error = m.meta.error;
+          f.detail = m.meta.detail || null;
           f.rows = m.meta.rows; f.sheets = m.meta.sheets;
           f.shard = slot.i;
           f.keys = [];
@@ -120,6 +151,8 @@
     if (state.mode === 'real' && b.total > 1) {
       const secs = ((performance.now() - b.t0) / 1000).toFixed(1);
       toast(`נקראו ${filesTxt(b.total)}, ${rowsTxt(b.rows)}, ב-${secs} שניות` + (errors ? ` · ${fmt(errors)} לא נקראו` : ''));
+    } else if (state.mode === 'real' && b.total === 1) {
+      toast(errors ? 'הקובץ לא נקרא — הסיבה מופיעה ברשימת הקבצים' : `הקובץ נקרא: ${rowsTxt(b.rows)}`);
     }
     if (state.mode === 'demo' && !$('q').value) $('q').value = DEMO_QUERIES[0];
     runSearch();
@@ -175,7 +208,7 @@
       state.files.set(path, f);
       added++;
     }
-    if (!added) toast(same ? `כל ${fmt(same)} הקבצים כבר נטענו ולא השתנו` : 'אין קבצים חדשים');
+    if (!added) toast(same === 1 ? 'הקובץ כבר נטען ולא השתנה' : same ? `כל ${fmt(same)} הקבצים כבר נטענו ולא השתנו` : 'אין קבצים חדשים');
     else if (same) toast(`${fmt(added)} קבצים חדשים או מעודכנים · ${fmt(same)} ללא שינוי`);
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) { /* לא חובה */ }
     drawConnect(); drawStatus(); pump();
@@ -259,7 +292,13 @@
         if (e && e.name === 'AbortError') return;
       }
     }
-    $('pickDir').click();
+    openPicker('pickDir');
+  }
+  function openPicker(id) {
+    const input = $(id);
+    const busy = state.queue.some((j) => j.type === 'parse') || state.workers.some((s) => s.busy);
+    if (!busy) input.value = ''; // מאפשר לבחור שוב את אותם קבצים
+    input.click();
   }
   async function refreshDir() {
     const h = state.dirHandle;
@@ -279,8 +318,8 @@
     }
   }
   function fromInput(input) {
+    // לא מנקים את השדה כאן: בחלק מהטלפונים ניקוי מיידי מבטל את הרשאת הקריאה לקבצים שנבחרו
     const out = [...input.files].map((file) => ({ file, path: file.webkitRelativePath || file.name }));
-    input.value = '';
     addFiles(out);
   }
   function readEntry(entry, prefix, out) {
@@ -640,7 +679,7 @@
       const count = f.status === 'done' ? rowsTxt(f.rows) : f.status === 'error' ? '' : 'בתור…';
       html += `<div class="file"><div><div class="n">${bd(f.name)}</div>${dir ? `<div class="p">${bd(dir)}</div>` : ''}</div>` +
         `<span class="c">${count}</span><button type="button" data-del="${esc(f.path)}" title="הסרה" aria-label="הסרת הקובץ">×</button>` +
-        (f.error ? `<div class="e">${esc(f.error)}</div>` : '') + '</div>';
+        (f.error ? `<div class="e">${esc(f.error)}${f.detail ? ` <span class="mono">(${esc(f.detail)})</span>` : ''}</div>` : '') + '</div>';
     }
     if (!list.length) html = `<div class="empty">${all.length ? 'אין קובץ בשם הזה' : 'עוד לא נטענו קבצים'}</div>`;
     else if (list.length > MAX) html += `<div class="empty">ועוד ${fmt(list.length - MAX)} קבצים — סננו לפי שם כדי לראות אותם</div>`;
@@ -677,8 +716,8 @@
     });
     $('btnDir').addEventListener('click', pickDir);
     $('dlgDir').addEventListener('click', pickDir);
-    $('btnFiles').addEventListener('click', () => $('pickFiles').click());
-    $('dlgFiles').addEventListener('click', () => $('pickFiles').click());
+    $('btnFiles').addEventListener('click', () => openPicker('pickFiles'));
+    $('dlgFiles').addEventListener('click', () => openPicker('pickFiles'));
     $('btnDemo').addEventListener('click', loadDemo);
     $('dlgRefresh').addEventListener('click', refreshDir);
     $('pickFiles').addEventListener('change', (e) => fromInput(e.target));

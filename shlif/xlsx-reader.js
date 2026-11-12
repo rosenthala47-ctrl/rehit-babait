@@ -39,9 +39,117 @@
   }
 
   // ---------- ZIP ----------
-  async function inflateRaw(u8) {
-    const stream = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+  // פריסת DEFLATE ב-JS טהור — לדפדפנים (בעיקר בטלפונים) שאין בהם DecompressionStream('deflate-raw')
+  const LBASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+  const LEXT = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  const DBASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+  const DEXT = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+  const CLORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+  function huff(lengths, n) {
+    const count = new Uint16Array(16), offs = new Uint16Array(16), symbol = new Uint16Array(n);
+    for (let i = 0; i < n; i++) count[lengths[i]]++;
+    count[0] = 0;
+    for (let i = 1; i < 16; i++) offs[i] = offs[i - 1] + count[i - 1];
+    for (let i = 0; i < n; i++) if (lengths[i]) symbol[offs[lengths[i]]++] = i;
+    return { count, symbol };
+  }
+  let FIXED = null;
+  function inflateJS(src, usize) {
+    let out = new Uint8Array(usize > 0 ? usize : Math.max(1024, src.length * 4));
+    let op = 0, ip = 0, buf = 0, cnt = 0;
+    const bits = (n) => {
+      while (cnt < n) { if (ip >= src.length) throw err('bad-zip'); buf |= src[ip++] << cnt; cnt += 8; }
+      const v = buf & ((1 << n) - 1);
+      buf >>>= n; cnt -= n;
+      return v;
+    };
+    const decode = (h) => {
+      let code = 0, first = 0, index = 0;
+      for (let len = 1; len <= 15; len++) {
+        code |= bits(1);
+        const c = h.count[len];
+        if (code - c < first) return h.symbol[index + (code - first)];
+        index += c; first += c; first <<= 1; code <<= 1;
+      }
+      throw err('bad-zip');
+    };
+    const room = (n) => {
+      if (op + n <= out.length) return;
+      const bigger = new Uint8Array(Math.max(out.length * 2, op + n));
+      bigger.set(out.subarray(0, op));
+      out = bigger;
+    };
+    let last = 0;
+    while (!last) {
+      last = bits(1);
+      const type = bits(2);
+      if (type === 0) {
+        buf = 0; cnt = 0;
+        const len = src[ip] | (src[ip + 1] << 8);
+        ip += 4;
+        room(len);
+        out.set(src.subarray(ip, ip + len), op);
+        op += len; ip += len;
+        continue;
+      }
+      let lc, dc;
+      if (type === 1) {
+        if (!FIXED) {
+          const l = new Uint8Array(288);
+          l.fill(8, 0, 144); l.fill(9, 144, 256); l.fill(7, 256, 280); l.fill(8, 280, 288);
+          FIXED = [huff(l, 288), huff(new Uint8Array(30).fill(5), 30)];
+        }
+        lc = FIXED[0]; dc = FIXED[1];
+      } else if (type === 2) {
+        const nl = bits(5) + 257, nd = bits(5) + 1, nc = bits(4) + 4;
+        const lens = new Uint8Array(320);
+        for (let i = 0; i < nc; i++) lens[CLORDER[i]] = bits(3);
+        const cl = huff(lens, 19);
+        lens.fill(0);
+        for (let i = 0; i < nl + nd;) {
+          const sym = decode(cl);
+          if (sym < 16) lens[i++] = sym;
+          else {
+            let rep, val = 0;
+            if (sym === 16) { if (!i) throw err('bad-zip'); val = lens[i - 1]; rep = 3 + bits(2); }
+            else if (sym === 17) rep = 3 + bits(3);
+            else rep = 11 + bits(7);
+            if (i + rep > nl + nd) throw err('bad-zip');
+            while (rep--) lens[i++] = val;
+          }
+        }
+        lc = huff(lens.subarray(0, nl), nl);
+        dc = huff(lens.subarray(nl, nl + nd), nd);
+      } else throw err('bad-zip');
+      for (;;) {
+        let sym = decode(lc);
+        if (sym < 256) { room(1); out[op++] = sym; continue; }
+        if (sym === 256) break;
+        sym -= 257;
+        if (sym >= 29) throw err('bad-zip');
+        const len = LBASE[sym] + bits(LEXT[sym]);
+        const ds = decode(dc);
+        if (ds >= 30) throw err('bad-zip');
+        const dist = DBASE[ds] + bits(DEXT[ds]);
+        if (dist > op) throw err('bad-zip');
+        room(len);
+        for (let i = 0, from = op - dist; i < len; i++) out[op++] = out[from + i];
+      }
+    }
+    return out.subarray(0, op);
+  }
+  let nativeInflate = typeof DecompressionStream === 'function' && typeof Response === 'function' && typeof Blob === 'function';
+  async function inflateRaw(u8, usize) {
+    if (nativeInflate && !root.SHLIF_FORCE_JS_INFLATE) {
+      let ds = null;
+      try { ds = new DecompressionStream('deflate-raw'); }
+      catch (e) { nativeInflate = false; } // הדפדפן מכיר DecompressionStream אבל לא 'deflate-raw'
+      if (ds) {
+        try { return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer()); }
+        catch (e) { /* נתונים פגומים או דפדפן חלקי — ה-JS יכריע */ }
+      }
+    }
+    return inflateJS(u8, usize);
   }
   function readZip(u8) {
     const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
@@ -80,7 +188,7 @@
           x += 4 + sz;
         }
       }
-      entries.set(name.toLowerCase(), { method, csize, lho });
+      entries.set(name.toLowerCase(), { method, csize, usize, lho });
       p += 46 + nlen + elen + clen;
     }
     return {
@@ -92,7 +200,7 @@
         const start = e.lho + 30 + nl + el;
         const data = u8.subarray(start, start + e.csize);
         if (e.method === 0) return data;
-        if (e.method === 8) return inflateRaw(data);
+        if (e.method === 8) return inflateRaw(data, e.usize);
         throw err('bad-zip');
       },
       async text(n) { const d = await this.read(n); return d ? utf8.decode(d) : null; },

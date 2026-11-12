@@ -207,10 +207,12 @@ const ERR_TEXT = {
   'empty': 'הקובץ ריק',
 };
 
-async function buildRecord(file, path) {
-  const u8 = new Uint8Array(await file.arrayBuffer());
-  const sheets = await Reader.readAny(u8, file.name);
-  const rec = { path, name: file.name, size: file.size, lastModified: file.lastModified, sheets: [] };
+async function buildRecord(job) {
+  // הדף קורא את הקובץ ומעביר את הבייטים (אמין יותר בטלפונים מהעברת הקובץ עצמו ל-Worker)
+  const u8 = new Uint8Array(job.buf || await job.file.arrayBuffer());
+  job.buf = null;
+  const sheets = await Reader.readAny(u8, job.name);
+  const rec = { path: job.path, name: job.name, size: job.size, lastModified: job.lastModified, sheets: [] };
   for (const sh of sheets) {
     const tb = extractTable(sh.grid);
     sh.grid = null;
@@ -232,28 +234,32 @@ async function cachePut(rec, meta) {
   }
 }
 
-function fileDone(job, rec, error, t0, cached) {
+function fileDone(job, rec, error, t0, cached, detail) {
   let tablesOut = [], nRows = 0;
   if (rec) {
     tablesOut = indexRecord(rec);
     for (const t of tablesOut) nRows += t.rows;
   }
-  const meta = { path: job.path, name: job.name, size: job.size, lastModified: job.lastModified, rows: nRows, sheets: tablesOut.length, error: error || null };
+  const meta = { path: job.path, name: job.name, size: job.size, lastModified: job.lastModified, rows: nRows, sheets: tablesOut.length, error: error || null, detail: detail || null };
   postMessage({ type: 'fileDone', job: job.id, path: job.path, tables: tablesOut, meta, ms: Math.round(performance.now() - t0), cached: !!cached });
   return meta;
 }
 
 async function handleParse(job) {
   const t0 = performance.now();
-  let rec = null, error = null;
+  let rec = null, error = null, detail = null;
   try {
-    rec = await buildRecord(job.file, job.path);
+    rec = await buildRecord(job);
     if (!rec.sheets.length) { rec = null; error = 'לא נמצאו נתונים בקובץ'; }
   } catch (e) {
     error = ERR_TEXT[e && e.code] || 'לא הצלחנו לקרוא את הקובץ';
-    if (!(e && e.code)) console.warn('shlif: ' + job.path + ': ' + (e && e.stack || e));
+    if (!(e && e.code)) {
+      // הסיבה הטכנית מוצגת ברשימת הקבצים, כדי שאפשר יהיה לאבחן תקלה ממכשיר שאין לנו גישה אליו
+      detail = String((e && e.name) || 'Error') + ': ' + String((e && e.message) || e).slice(0, 140);
+      console.warn('shlif: ' + job.path + ': ' + (e && e.stack || e));
+    }
   }
-  const meta = fileDone(job, rec, error, t0, false);
+  const meta = fileDone(job, rec, error, t0, false, detail);
   if (rec && job.cache !== false) cachePut(rec, meta);
 }
 
